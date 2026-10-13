@@ -73,9 +73,17 @@ class Usuario(models.Model):
     estado = models.CharField(
         max_length=20, 
         default='Activo',
-        choices=[('Activo', 'Activo'), ('Inactivo', 'Inactivo'), ('Bloqueado', 'Bloqueado')],
+        choices=[
+            ('Activo', 'Activo'), 
+            ('Inactivo', 'Inactivo'), 
+            ('Bloqueado', 'Bloqueado'),
+            ('Bloqueado Temporal', 'Bloqueado Temporal')
+        ],
         db_column='estado'
     )
+    intentosFallidos = models.IntegerField(default=0, db_column='intentosfallidos')
+    fechaBloqueoHasta = models.DateTimeField(null=True, blank=True, db_column='fechabloqueohasta')
+    totalBloqueosRecibidos = models.IntegerField(default=0, db_column='totalbloqueosrecibidos')
     fechaCreacion = models.DateTimeField(auto_now_add=True, db_column='fechacreacion')
     roles = models.ManyToManyField(
         Rol,

@@ -31,15 +31,37 @@ class LoginSerializer(serializers.Serializer):
         except Usuario.DoesNotExist:
             raise serializers.ValidationError({"detail": "Credenciales inválidas. Usuario no encontrado."})
 
-        # Comprobar contraseña
-        if not usuario.check_password(password):
-            raise serializers.ValidationError({"detail": "Credenciales inválidas. Contraseña incorrecta."})
-
-        # Regla de Negocio: Validar que el usuario esté en estado = 'Activo'
+        # Verificar si la cuenta ya está inhabilitada o bloqueada (CU01 Excepción E2)
+        if usuario.estado in ('Bloqueado', 'Bloqueado Temporal'):
+            raise serializers.ValidationError({
+                "detail": "Acceso denegado. La cuenta se encuentra bloqueada por superar el límite de intentos fallidos. Contacte al Administrador del Sistema para su rehabilitación."
+            })
         if usuario.estado != 'Activo':
             raise serializers.ValidationError({
-                "detail": f"Acceso denegado. La cuenta se encuentra en estado '{usuario.estado}'."
+                "detail": f"Acceso denegado. La cuenta se encuentra en estado '{usuario.estado}'. Contacte al Administrador."
             })
+
+        # Comprobar contraseña
+        if not usuario.check_password(password):
+            usuario.intentosFallidos = (usuario.intentosFallidos or 0) + 1
+            if usuario.intentosFallidos >= 3:
+                usuario.estado = 'Bloqueado'
+                usuario.totalBloqueosRecibidos = (usuario.totalBloqueosRecibidos or 0) + 1
+                usuario.save(update_fields=['intentosFallidos', 'estado', 'totalBloqueosRecibidos'])
+                raise serializers.ValidationError({
+                    "detail": "Acceso cancelado e inhabilitado: Ha alcanzado 3 intentos fallidos consecutivos. La cuenta ha sido bloqueada por seguridad. Contacte al Administrador."
+                })
+            else:
+                intentos_restantes = 3 - usuario.intentosFallidos
+                usuario.save(update_fields=['intentosFallidos'])
+                raise serializers.ValidationError({
+                    "detail": f"Credenciales inválidas. Contraseña incorrecta. Le quedan {intentos_restantes} intento(s) antes del bloqueo de seguridad."
+                })
+
+        # Al ser correcta, restablecer intentos fallidos a 0
+        if usuario.intentosFallidos != 0:
+            usuario.intentosFallidos = 0
+            usuario.save(update_fields=['intentosFallidos'])
 
         # Obtener lista de roles asignados en UsuarioRol
         roles_list = list(usuario.roles.all())

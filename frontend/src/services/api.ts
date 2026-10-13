@@ -366,6 +366,30 @@ export const apiService = {
       }
       throw new Error('Fallo de conexión: No se pudo contactar al servidor de HemoVida en Render/Supabase.');
     }
+  },
+
+  /**
+   * CU02: Actualizar estado de usuario (Desbloquear / Activar / Inactivar)
+   */
+  async updateUsuarioEstado(idUsuario: number, estado: 'Activo' | 'Inactivo' | 'Bloqueado', token?: string): Promise<any> {
+    const savedToken = token || localStorage.getItem('hemovida_jwt_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    if (savedToken) {
+      headers['Authorization'] = `Bearer ${savedToken}`;
+    }
+    const res = await fetch(`${API_BASE_URL}/usuarios/${idUsuario}/estado/`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ estado })
+    });
+    const resData = await res.json();
+    if (!res.ok) {
+      throw new Error(resData.detail || 'Error al actualizar el estado del usuario.');
+    }
+    return resData;
   }
 };
 

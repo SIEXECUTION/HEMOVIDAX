@@ -196,13 +196,18 @@ class UsuarioEstadoUpdateView(APIView):
         nuevo_estado = serializer.validated_data['estado']
 
         usuario.estado = nuevo_estado
-        usuario.save(update_fields=['estado'])
+        if nuevo_estado == 'Activo':
+            usuario.intentosFallidos = 0
+            usuario.fechaBloqueoHasta = None
+            usuario.save(update_fields=['estado', 'intentosFallidos', 'fechaBloqueoHasta'])
+        else:
+            usuario.save(update_fields=['estado'])
 
         # Registro en Bitácora de Auditoría
         ip_origen = get_client_ip(request)
         registrar_auditoria(
             usuario=request.user,
-            accion=f"Actualización de estado de usuario '{usuario.username}': {estado_anterior} -> {nuevo_estado}",
+            accion=f"Actualización de estado de usuario '{usuario.username}': {estado_anterior} -> {nuevo_estado} (CU02 Desbloqueo/Gestión)",
             tabla='Usuario',
             id_registro=usuario.idUsuario,
             ip_origen=ip_origen,
@@ -213,7 +218,8 @@ class UsuarioEstadoUpdateView(APIView):
             "message": f"Estado del usuario '{usuario.username}' actualizado a '{nuevo_estado}' con éxito.",
             "idUsuario": usuario.idUsuario,
             "username": usuario.username,
-            "estado": usuario.estado
+            "estado": usuario.estado,
+            "intentosFallidos": usuario.intentosFallidos
         }, status=status.HTTP_200_OK)
 
 

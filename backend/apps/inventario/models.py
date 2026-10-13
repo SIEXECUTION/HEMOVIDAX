@@ -98,6 +98,7 @@ class EjemplarBolsa(models.Model):
     volumenMl = models.IntegerField(db_column='volumenml')
     fechaExtraccion = models.DateField(db_column='fechaextraccion')
     fechaCaducidad = models.DateField(db_column='fechacaducidad')
+    esExclusivoAutologo = models.BooleanField(default=False, db_column='esexclusivoautologo')
     estadoBolsaK = models.CharField(
         max_length=25,
         default='En Cuarentena',
