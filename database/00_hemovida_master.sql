@@ -1,5 +1,5 @@
 -- ============================================================================
--- BANCO DE SANGRE "HEMOVIDA" - DDL COMPLETO ACTUALIZADO (PostgreSQL 14+)
+-- BANCO DE SANGRE "HEMOVIDA" - DDL COMPLETO ACTUALIZADO (PostgreSQL 14+ / Supabase)
 -- ============================================================================
 
 DROP TABLE IF EXISTS BitacoraAuditoria CASCADE;
@@ -8,14 +8,18 @@ DROP TABLE IF EXISTS ComprobanteDespacho CASCADE;
 DROP TABLE IF EXISTS ComprobantePago CASCADE;
 DROP TABLE IF EXISTS CompromisoDonacion CASCADE;
 DROP TABLE IF EXISTS ReposicionPendiente CASCADE;
+DROP TABLE IF EXISTS ReservaSangre CASCADE;
 DROP TABLE IF EXISTS PruebaCompatibilidad CASCADE;
+DROP TABLE IF EXISTS DetalleSolicitud CASCADE;
 DROP TABLE IF EXISTS SolicitudHospitalaria CASCADE;
 DROP TABLE IF EXISTS CitaLaboratorio CASCADE;
 DROP TABLE IF EXISTS BajaInventario CASCADE;
 DROP TABLE IF EXISTS EjemplarBolsa CASCADE;
-DROP TABLE IF EXISTS AnalisisInmunoSerologico CASCADE;
+DROP TABLE IF EXISTS AnalisisInmunoHematologico CASCADE;
 DROP TABLE IF EXISTS PruebaInmunohematologica CASCADE;
+DROP TABLE IF EXISTS AnalisisInmunoSerologico CASCADE;
 DROP TABLE IF EXISTS UnidadSangreTotal CASCADE;
+DROP TABLE IF EXISTS ConsentimientoInformado CASCADE;
 DROP TABLE IF EXISTS IncentivoEntrega CASCADE;
 DROP TABLE IF EXISTS ExtraccionDonacion CASCADE;
 DROP TABLE IF EXISTS Diferimiento CASCADE;
@@ -58,10 +62,10 @@ INSERT INTO Rol (nombreRol, codigoRol, descripcion) VALUES
 ('Donante', 'DONANTE', 'Donante calificado y validado con historial de extracciones'),
 ('Receptor / Tutor Familiar', 'RECEPTOR', 'Paciente o tutor legal solicitante de hemocomponentes'),
 ('Doctor(a) de Triaje', 'DOC_TRIAJE', 'Evaluación clínica previa y diferimiento de postulantes'),
-('Personal de Colecta', 'PERS_COLECTA', 'Flebotomistas y extracción de sangre'),
-('Bioquímico(a) Integral', 'BIOQ_INTEGRAL', 'Ensayos serológicos, inmunohematología y liberación biológica'),
-('Técnico(a) de Logística', 'TEC_LOGISTICA', 'Almacén, cadena de frío y despacho de hemocomponentes'),
-('Médico(a) Solicitante / Clínica', 'MED_SOLICITANTE', 'Prescripción y solicitud hospitalaria externa/interna');
+('Personal de Colecta', 'PERS_COLECTA', 'Recepción presencial y flebotomía asistida'),
+('Bioquímico(a) Integral', 'BIOQ_INTEGRAL', 'Inmunoserología, inmunohematología y fraccionamiento'),
+('Técnico(a) de Logística', 'TEC_LOGISTICA', 'Almacén físico, cadena de frío y despacho transfusional'),
+('Médico(a) Solicitante', 'MED_SOLICITANTE', 'Solicitud hospitalaria pretransfusional');
 
 -- Entidad Base Persona (incluye nacionalidad)
 CREATE TABLE Persona (
@@ -77,14 +81,17 @@ CREATE TABLE Persona (
     nacionalidad VARCHAR(50) DEFAULT 'Boliviana'
 );
 
--- Cuentas de Acceso (Sin idRol directo: 1 login por persona)
+-- Cuentas de Acceso (CU01 / CU02: Soporte de bloqueo e intentos fallidos)
 CREATE TABLE Usuario (
     idUsuario SERIAL PRIMARY KEY,
     idPersona INT NOT NULL UNIQUE,
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     passwordHash VARCHAR(255) NOT NULL,
-    estado VARCHAR(20) NOT NULL DEFAULT 'Activo' CHECK (estado IN ('Activo', 'Inactivo', 'Bloqueado')),
+    estado VARCHAR(20) NOT NULL DEFAULT 'Activo' CHECK (estado IN ('Activo', 'Inactivo', 'Bloqueado', 'Bloqueado Temporal')),
+    intentosFallidos INT NOT NULL DEFAULT 0,
+    fechaBloqueoHasta TIMESTAMP NULL,
+    totalBloqueosRecibidos INT NOT NULL DEFAULT 0,
     fechaCreacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_usuario_persona FOREIGN KEY (idPersona)
         REFERENCES Persona (idPersona) ON DELETE CASCADE
@@ -102,7 +109,7 @@ CREATE TABLE UsuarioRol (
         REFERENCES Rol (idRol) ON DELETE CASCADE
 );
 
--- Bitácora con soporte para Rol Activo de sesión
+-- Bitácora con soporte para Rol Activo de sesión (CU03)
 CREATE TABLE BitacoraAuditoria (
     idAuditoria SERIAL PRIMARY KEY,
     idUsuario INT,
@@ -125,17 +132,18 @@ CREATE TABLE PersonalSalud (
         REFERENCES Persona (idPersona) ON DELETE CASCADE
 );
 
--- Posible Donador (Nace No Apto y Sin Análisis)
+-- Posible Donador (Nace No Apto y Sin Análisis - CU06)
 CREATE TABLE PosibleDonador (
     idPersona INT PRIMARY KEY,
     estadoAptitud VARCHAR(30) NOT NULL DEFAULT 'No Apto' CHECK (estadoAptitud IN ('No Apto', 'En Evaluacion', 'Apto')),
     tieneAnalisis BOOLEAN NOT NULL DEFAULT FALSE,
     fechaRegistroPostulante DATE NOT NULL DEFAULT CURRENT_DATE,
+    carnetProvisionalCodigo VARCHAR(40) UNIQUE,
     CONSTRAINT fk_posibledonador_persona FOREIGN KEY (idPersona)
         REFERENCES Persona (idPersona) ON DELETE CASCADE
 );
 
--- Donante Calificado (Solo quienes superan la Inmunoserología)
+-- Donante Calificado (CU05)
 CREATE TABLE Donante (
     idPersona INT PRIMARY KEY,
     carnetDigitalCodigo VARCHAR(30) NOT NULL UNIQUE,
@@ -146,16 +154,19 @@ CREATE TABLE Donante (
         REFERENCES Persona (idPersona) ON DELETE CASCADE
 );
 
--- Receptores
+-- Receptores (Normalizado con FK a GrupoSanguineo)
 CREATE TABLE Receptor (
     idPersona INT PRIMARY KEY,
     codigoHistorialClinico VARCHAR(40) NOT NULL UNIQUE,
     grupoSanguineoReceptor VARCHAR(20) NOT NULL,
+    idGrupo INT,
     CONSTRAINT fk_receptor_persona FOREIGN KEY (idPersona)
-        REFERENCES Persona (idPersona) ON DELETE CASCADE
+        REFERENCES Persona (idPersona) ON DELETE CASCADE,
+    CONSTRAINT fk_receptor_grupo FOREIGN KEY (idGrupo)
+        REFERENCES GrupoSanguineo (idGrupo) ON DELETE RESTRICT
 );
 
--- Resto de tablas operativas
+-- Requisitos de Donación (CU06 Prefiltro)
 CREATE TABLE RequisitoDonacion (
     idRequisito SERIAL PRIMARY KEY,
     nombreRequisito VARCHAR(120) NOT NULL,
@@ -163,6 +174,7 @@ CREATE TABLE RequisitoDonacion (
     esExcluyenteDefinitivo BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- Cita Donación (CU07 / CU08)
 CREATE TABLE CitaDonacion (
     idCita SERIAL PRIMARY KEY,
     idPersona INT NOT NULL,
@@ -186,6 +198,7 @@ CREATE TABLE DetalleCitaRequisito (
         REFERENCES RequisitoDonacion (idRequisito)
 );
 
+-- Triaje Clínico (CU10)
 CREATE TABLE TriajeClinico (
     idTriaje SERIAL PRIMARY KEY,
     idPosibleDonador INT NOT NULL,
@@ -203,6 +216,7 @@ CREATE TABLE TriajeClinico (
         REFERENCES PersonalSalud (idPersona)
 );
 
+-- Diferimiento (CU11)
 CREATE TABLE Diferimiento (
     idDiferimiento SERIAL PRIMARY KEY,
     idTriaje INT UNIQUE,
@@ -217,6 +231,7 @@ CREATE TABLE Diferimiento (
         REFERENCES PosibleDonador (idPersona)
 );
 
+-- Extracción de Donación (CU12: Trazabilidad a Triaje)
 CREATE TABLE ExtraccionDonacion (
     idExtraccion SERIAL PRIMARY KEY,
     idPersonaDonante INT NOT NULL,
@@ -225,10 +240,23 @@ CREATE TABLE ExtraccionDonacion (
     fechaHora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     volumenExtraidoMl INT NOT NULL CHECK (volumenExtraidoMl > 0),
     brazoExtraccion VARCHAR(15) NOT NULL CHECK (brazoExtraccion IN ('Izquierdo', 'Derecho')),
+    idTriaje INT UNIQUE,
     CONSTRAINT fk_extraccion_persona FOREIGN KEY (idPersonaDonante)
         REFERENCES Persona (idPersona),
     CONSTRAINT fk_extraccion_enfermero FOREIGN KEY (idPersonalSalud)
-        REFERENCES PersonalSalud (idPersona)
+        REFERENCES PersonalSalud (idPersona),
+    CONSTRAINT fk_extraccion_triaje FOREIGN KEY (idTriaje)
+        REFERENCES TriajeClinico (idTriaje) ON DELETE RESTRICT
+);
+
+CREATE TABLE ConsentimientoInformado (
+    idConsentimiento SERIAL PRIMARY KEY,
+    idExtraccion INT NOT NULL UNIQUE,
+    fechaFirma TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    declaracionJuradaAceptada BOOLEAN NOT NULL CHECK (declaracionJuradaAceptada = TRUE),
+    firmaDigital TEXT NOT NULL,
+    CONSTRAINT fk_consentimiento_extraccion FOREIGN KEY (idExtraccion)
+        REFERENCES ExtraccionDonacion (idExtraccion) ON DELETE CASCADE
 );
 
 CREATE TABLE IncentivoEntrega (
@@ -241,6 +269,7 @@ CREATE TABLE IncentivoEntrega (
         REFERENCES ExtraccionDonacion (idExtraccion) ON DELETE CASCADE
 );
 
+-- Almacén y Cuarentena
 CREATE TABLE UnidadSangreTotal (
     idUnidadMadre SERIAL PRIMARY KEY,
     idExtraccion INT NOT NULL UNIQUE,
@@ -254,6 +283,7 @@ CREATE TABLE UnidadSangreTotal (
         REFERENCES GrupoSanguineo (idGrupo)
 );
 
+-- Análisis Inmunoserológico (CU13)
 CREATE TABLE AnalisisInmunoSerologico (
     idAnalisis SERIAL PRIMARY KEY,
     idUnidadMadre INT NOT NULL UNIQUE,
@@ -274,26 +304,33 @@ CREATE TABLE AnalisisInmunoSerologico (
         REFERENCES PersonalSalud (idPersona)
 );
 
-CREATE TABLE PruebaInmunohematologica (
-    idPruebaInmuno SERIAL PRIMARY KEY,
-    idUnidadMadre INT,
-    idPersona INT NOT NULL,
-    idGrupo INT NOT NULL,
+-- Análisis Inmunohematológico Unificado (CU14)
+CREATE TABLE AnalisisInmunoHematologico (
+    idAnalisisHematologico SERIAL PRIMARY KEY,
     idPersonalSalud INT NOT NULL,
-    fechaHoraPrueba TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    idPosibleDonador INT,
+    idReceptor INT,
+    idUnidadMadre INT,
+    idCitaLab INT,
+    etapaAnalisis VARCHAR(50) NOT NULL CHECK (etapaAnalisis IN ('Pre-Extraccion', 'Post-Extraccion', 'Pre-Transfusional')),
+    fechaAnalisis TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    grupoABOConfirmado VARCHAR(5) NOT NULL CHECK (grupoABOConfirmado IN ('A', 'B', 'AB', 'O')),
+    factorRhConfirmado VARCHAR(10) NOT NULL CHECK (factorRhConfirmado IN ('Positivo', 'Negativo')),
+    pruebaCoombsDirecta VARCHAR(30) NOT NULL,
+    pruebaCoombsIndirecta VARCHAR(30) NOT NULL,
+    rastreoAnticuerposIrregulares VARCHAR(100) NOT NULL,
+    observaciones TEXT,
     faseSalina VARCHAR(30),
     faseTermica VARCHAR(30),
-    coombsDirecto VARCHAR(30),
-    rastreoAnticuerposIrregulares VARCHAR(30),
-    dictamenInmunohematologico VARCHAR(100) NOT NULL,
-    CONSTRAINT fk_inmuno_madre FOREIGN KEY (idUnidadMadre)
-        REFERENCES UnidadSangreTotal (idUnidadMadre) ON DELETE SET NULL,
-    CONSTRAINT fk_inmuno_persona FOREIGN KEY (idPersona)
-        REFERENCES Persona (idPersona),
-    CONSTRAINT fk_inmuno_grupo FOREIGN KEY (idGrupo)
-        REFERENCES GrupoSanguineo (idGrupo),
+    dictamenInmunohematologico VARCHAR(100),
     CONSTRAINT fk_inmuno_bioquimico FOREIGN KEY (idPersonalSalud)
-        REFERENCES PersonalSalud (idPersona)
+        REFERENCES PersonalSalud (idPersona),
+    CONSTRAINT fk_inmuno_posible FOREIGN KEY (idPosibleDonador)
+        REFERENCES PosibleDonador (idPersona) ON DELETE SET NULL,
+    CONSTRAINT fk_inmuno_receptor FOREIGN KEY (idReceptor)
+        REFERENCES Receptor (idPersona) ON DELETE SET NULL,
+    CONSTRAINT fk_inmuno_madre FOREIGN KEY (idUnidadMadre)
+        REFERENCES UnidadSangreTotal (idUnidadMadre) ON DELETE SET NULL
 );
 
 CREATE TABLE UbicacionAlmacen (
@@ -316,6 +353,7 @@ CREATE TABLE ParametroStockMinimo (
     CONSTRAINT uq_parametro_grupo_componente UNIQUE (idGrupo, tipoComponente)
 );
 
+-- Ejemplar Bolsa (CU04 / CU15 / CU21: Flag esExclusivoAutologo)
 CREATE TABLE EjemplarBolsa (
     idEjemplarBolsa SERIAL PRIMARY KEY,
     idUnidadMadre INT,
@@ -332,6 +370,7 @@ CREATE TABLE EjemplarBolsa (
     estadoBolsaK VARCHAR(25) NOT NULL DEFAULT 'En Cuarentena' CHECK (estadoBolsaK IN (
         'Disponible', 'En Cuarentena', 'Reservada', 'Despachada', 'Baja'
     )),
+    esExclusivoAutologo BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_ejemplar_madre FOREIGN KEY (idUnidadMadre)
         REFERENCES UnidadSangreTotal (idUnidadMadre) ON DELETE SET NULL,
     CONSTRAINT fk_ejemplar_grupo FOREIGN KEY (idGrupo)
@@ -340,6 +379,7 @@ CREATE TABLE EjemplarBolsa (
         REFERENCES UbicacionAlmacen (idUbicacion)
 );
 
+-- Baja Inventario (Exclusión mutua XOR)
 CREATE TABLE BajaInventario (
     idBaja SERIAL PRIMARY KEY,
     idUnidadMadre INT,
@@ -353,7 +393,11 @@ CREATE TABLE BajaInventario (
     CONSTRAINT fk_baja_ejemplar FOREIGN KEY (idEjemplarBolsa)
         REFERENCES EjemplarBolsa (idEjemplarBolsa) ON DELETE SET NULL,
     CONSTRAINT fk_baja_responsable FOREIGN KEY (idPersonalSalud)
-        REFERENCES PersonalSalud (idPersona)
+        REFERENCES PersonalSalud (idPersona),
+    CONSTRAINT chk_baja_origen_xor CHECK (
+        (idUnidadMadre IS NOT NULL AND idEjemplarBolsa IS NULL) OR
+        (idUnidadMadre IS NULL AND idEjemplarBolsa IS NOT NULL)
+    )
 );
 
 CREATE TABLE InstitucionSalud (
@@ -367,7 +411,7 @@ CREATE TABLE InstitucionSalud (
 CREATE TABLE CitaLaboratorio (
     idCitaLab SERIAL PRIMARY KEY,
     idReceptor INT NOT NULL,
-    idInstitucion INT,
+    idinstitucion INT,
     fechaHoraCita TIMESTAMP NOT NULL,
     fechaCirugiaProgramada DATE NOT NULL,
     tipoAnalisisRequerido VARCHAR(100) NOT NULL,
@@ -399,6 +443,40 @@ CREATE TABLE SolicitudHospitalaria (
         REFERENCES InstitucionSalud (idInstitucion),
     CONSTRAINT fk_solicitud_receptor FOREIGN KEY (idReceptor)
         REFERENCES Receptor (idPersona)
+);
+
+CREATE TABLE DetalleSolicitud (
+    idDetalle SERIAL PRIMARY KEY,
+    idSolicitud INT NOT NULL,
+    idGrupo INT NOT NULL,
+    tipoComponenteRequerido VARCHAR(50) NOT NULL CHECK (tipoComponenteRequerido IN (
+        'Concentrado de Globulos Rojos', 'Plasma Fresco Congelado',
+        'Concentrado Plaquetario', 'Crioprecipitado'
+    )),
+    cantidadSolicitada INT NOT NULL CHECK (cantidadSolicitada > 0),
+    cantidadAsignada INT NOT NULL DEFAULT 0 CHECK (cantidadAsignada >= 0),
+    CONSTRAINT fk_detallesolicitud_solicitud FOREIGN KEY (idSolicitud)
+        REFERENCES SolicitudHospitalaria (idSolicitud) ON DELETE CASCADE,
+    CONSTRAINT fk_detallesolicitud_grupo FOREIGN KEY (idGrupo)
+        REFERENCES GrupoSanguineo (idGrupo)
+);
+
+CREATE TABLE ReservaSangre (
+    idReserva SERIAL PRIMARY KEY,
+    idReceptor INT NOT NULL,
+    idEjemplarBolsa INT NOT NULL UNIQUE,
+    idDetalleSolicitud INT,
+    fechaReserva TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    esAutologa BOOLEAN NOT NULL DEFAULT FALSE,
+    motivoReserva VARCHAR(100),
+    fechaVencimientoReserva DATE NOT NULL,
+    estadoReserva VARCHAR(30) NOT NULL DEFAULT 'Activa' CHECK (estadoReserva IN ('Activa', 'Consumida', 'Vencida', 'Cancelada')),
+    CONSTRAINT fk_reserva_receptor FOREIGN KEY (idReceptor)
+        REFERENCES Receptor (idPersona),
+    CONSTRAINT fk_reserva_ejemplar FOREIGN KEY (idEjemplarBolsa)
+        REFERENCES EjemplarBolsa (idEjemplarBolsa),
+    CONSTRAINT fk_reserva_detallesolicitud FOREIGN KEY (idDetalleSolicitud)
+        REFERENCES DetalleSolicitud (idDetalle) ON DELETE SET NULL
 );
 
 CREATE TABLE PruebaCompatibilidad (
@@ -434,7 +512,7 @@ CREATE TABLE ComprobanteDespacho (
 CREATE TABLE DetalleDespacho (
     idDetalleDespacho SERIAL PRIMARY KEY,
     idDespacho INT NOT NULL,
-    idEjemplarBolsa INT NOT NULL,
+    idEjemplarBolsa INT NOT NULL UNIQUE,
     CONSTRAINT fk_detalledespacho_despacho FOREIGN KEY (idDespacho)
         REFERENCES ComprobanteDespacho (idDespacho) ON DELETE CASCADE,
     CONSTRAINT fk_detalledespacho_ejemplar FOREIGN KEY (idEjemplarBolsa)
@@ -470,6 +548,7 @@ CREATE TABLE CompromisoDonacion (
     idReposicion INT NOT NULL,
     idPersonaFirmante INT NOT NULL,
     idDonante INT,
+    idExtraccion INT UNIQUE,
     fechaCompromiso DATE NOT NULL DEFAULT CURRENT_DATE,
     donacionConcretada BOOLEAN NOT NULL DEFAULT FALSE,
     volumenDonadoEfectivoMl INT DEFAULT 0,
@@ -479,7 +558,9 @@ CREATE TABLE CompromisoDonacion (
     CONSTRAINT fk_compromiso_firmante FOREIGN KEY (idPersonaFirmante)
         REFERENCES Persona (idPersona),
     CONSTRAINT fk_compromiso_donante FOREIGN KEY (idDonante)
-        REFERENCES Donante (idPersona) ON DELETE SET NULL
+        REFERENCES Donante (idPersona) ON DELETE SET NULL,
+    CONSTRAINT fk_compromiso_extraccion FOREIGN KEY (idExtraccion)
+        REFERENCES ExtraccionDonacion (idExtraccion) ON DELETE SET NULL
 );
 
 -- Índices estratégicos
@@ -493,320 +574,6 @@ CREATE INDEX idx_unidad_extraccion ON UnidadSangreTotal(idExtraccion);
 CREATE INDEX idx_ejemplar_madre ON EjemplarBolsa(idUnidadMadre);
 CREATE INDEX idx_ejemplar_estado ON EjemplarBolsa(estadoBolsaK);
 CREATE INDEX idx_solicitud_estado ON SolicitudHospitalaria(estadoSolicitud);
--- ============================================================================
--- BANCO DE SANGRE "HEMOVIDA" - TRIGGERS DE NEGOCIO (PostgreSQL 14+)
--- ============================================================================
-
--- A. Exclusión Mutua entre Posible Donador y Donante
--- Impide que una misma cuenta tenga asignados ambos roles al mismo tiempo
-CREATE OR REPLACE FUNCTION fn_trg_validar_exclusion_roles()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_codRolInsertado VARCHAR(30);
-    v_tieneOpuesto BOOLEAN := FALSE;
-BEGIN
-    SELECT codigoRol INTO v_codRolInsertado FROM Rol WHERE idRol = NEW.idRol;
-    
-    IF v_codRolInsertado = 'POSIBLE_DONADOR' THEN
-        SELECT EXISTS (
-            SELECT 1 FROM UsuarioRol ur
-            JOIN Rol r ON ur.idRol = r.idRol
-            WHERE ur.idUsuario = NEW.idUsuario AND r.codigoRol = 'DONANTE'
-        ) INTO v_tieneOpuesto;
-        
-        IF v_tieneOpuesto THEN
-            RAISE EXCEPTION 'Inconsistencia de Negocio: Un usuario no puede ser Posible Donador y Donante simultáneamente.';
-        END IF;
-    ELSIF v_codRolInsertado = 'DONANTE' THEN
-        SELECT EXISTS (
-            SELECT 1 FROM UsuarioRol ur
-            JOIN Rol r ON ur.idRol = r.idRol
-            WHERE ur.idUsuario = NEW.idUsuario AND r.codigoRol = 'POSIBLE_DONADOR'
-        ) INTO v_tieneOpuesto;
-        
-        IF v_tieneOpuesto THEN
-            RAISE EXCEPTION 'Inconsistencia de Negocio: Un usuario no puede ser Donante y Posible Donador al mismo tiempo.';
-        END IF;
-    END IF;
-    
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_validar_exclusion_roles ON UsuarioRol;
-CREATE TRIGGER trg_validar_exclusion_roles
-BEFORE INSERT OR UPDATE ON UsuarioRol
-FOR EACH ROW
-EXECUTE FUNCTION fn_trg_validar_exclusion_roles();
-
-
--- B. Ascenso a Donante Condicionado al Análisis Inmunoserológico
--- Cuando el bioquímico registra el dictamen Apto en AnalisisInmunoSerologico,
--- se actualiza la aptitud del postulante, se crea su carnet digital en Donante,
--- y se migra su rol en el sistema (preservando el historial de PosibleDonador).
-CREATE OR REPLACE FUNCTION fn_trg_ascenso_donante_serologia()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_idPersona INT;
-    v_idUsuario INT;
-    v_idRolPosible INT;
-    v_idRolDonante INT;
-    v_carnet VARCHAR(30);
-BEGIN
-    -- 1. Obtener la persona donante a partir de la extracción vinculada a la bolsa
-    SELECT ed.idPersonaDonante INTO v_idPersona
-    FROM UnidadSangreTotal ust
-    JOIN ExtraccionDonacion ed ON ust.idExtraccion = ed.idExtraccion
-    WHERE ust.idUnidadMadre = NEW.idUnidadMadre;
-
-    SELECT idRol INTO v_idRolPosible FROM Rol WHERE codigoRol = 'POSIBLE_DONADOR';
-    SELECT idRol INTO v_idRolDonante FROM Rol WHERE codigoRol = 'DONANTE';
-    SELECT idUsuario INTO v_idUsuario FROM Usuario WHERE idPersona = v_idPersona;
-
-    -- 2. Registrar que la persona ya cuenta con análisis de laboratorio
-    UPDATE PosibleDonador 
-    SET tieneAnalisis = TRUE 
-    WHERE idPersona = v_idPersona;
-
-    -- 3. Veredicto Serológico Apto: Habilitación y cambio de roles
-    IF NEW.dictamenFinal = 'Apto' THEN
-        -- Actualizar estado médico a Apto
-        UPDATE PosibleDonador 
-        SET estadoAptitud = 'Apto' 
-        WHERE idPersona = v_idPersona;
-
-        -- Generar carnet digital en Donante
-        v_carnet := CONCAT('HEMO-', TO_CHAR(CURRENT_DATE, 'YYYY'), '-', v_idPersona);
-        
-        IF NOT EXISTS (SELECT 1 FROM Donante WHERE idPersona = v_idPersona) THEN
-            INSERT INTO Donante (idPersona, carnetDigitalCodigo, tipoDonante, estadoHabilitacion, fechaUltimaDonacion)
-            VALUES (v_idPersona, v_carnet, 'Voluntario Altruista', 'Apto', CURRENT_DATE);
-        ELSE
-            UPDATE Donante 
-            SET estadoHabilitacion = 'Apto', fechaUltimaDonacion = CURRENT_DATE
-            WHERE idPersona = v_idPersona;
-        END IF;
-
-        -- Transición de credenciales de acceso:
-        -- Se retira el rol POSIBLE_DONADOR y se otorga el rol DONANTE
-        IF v_idUsuario IS NOT NULL THEN
-            DELETE FROM UsuarioRol WHERE idUsuario = v_idUsuario AND idRol = v_idRolPosible;
-            
-            INSERT INTO UsuarioRol (idUsuario, idRol)
-            VALUES (v_idUsuario, v_idRolDonante)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-    -- 4. Veredicto Serológico No Apto (Reactivo)
-    ELSIF NEW.dictamenFinal = 'No Apto' THEN
-        UPDATE PosibleDonador 
-        SET estadoAptitud = 'No Apto' 
-        WHERE idPersona = v_idPersona;
-
-        IF EXISTS (SELECT 1 FROM Donante WHERE idPersona = v_idPersona) THEN
-            UPDATE Donante 
-            SET estadoHabilitacion = 'Diferido Definitivo' 
-            WHERE idPersona = v_idPersona;
-        END IF;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_ascenso_donante_serologia ON AnalisisInmunoSerologico;
-CREATE TRIGGER trg_ascenso_donante_serologia
-AFTER INSERT OR UPDATE OF dictamenFinal ON AnalisisInmunoSerologico
-FOR EACH ROW
-EXECUTE FUNCTION fn_trg_ascenso_donante_serologia();
-
-
--- C. Barrera de liberación y descarte automático de bolsas en laboratorio
-CREATE OR REPLACE FUNCTION fn_trg_barrera_liberacion_serologica()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.dictamenFinal = 'Apto' THEN
-        UPDATE EjemplarBolsa
-        SET estadoBolsaK = 'Disponible'
-        WHERE idUnidadMadre = NEW.idUnidadMadre
-          AND estadoBolsaK = 'En Cuarentena';
-          
-        UPDATE UnidadSangreTotal
-        SET estadoLiberacion = 'Liberada Apta'
-        WHERE idUnidadMadre = NEW.idUnidadMadre;
-        
-    ELSIF NEW.dictamenFinal = 'No Apto' THEN
-        UPDATE EjemplarBolsa
-        SET estadoBolsaK = 'Baja'
-        WHERE idUnidadMadre = NEW.idUnidadMadre;
-        
-        UPDATE UnidadSangreTotal
-        SET estadoLiberacion = 'Rechazada'
-        WHERE idUnidadMadre = NEW.idUnidadMadre;
-        
-        INSERT INTO BajaInventario (
-            idUnidadMadre,
-            idPersonalSalud,
-            fechaHoraBaja,
-            motivoBaja,
-            observaciones
-        ) VALUES (
-            NEW.idUnidadMadre,
-            NEW.idPersonalSalud,
-            CURRENT_TIMESTAMP,
-            'Reactividad Serológica',
-            'Descarte preventivo por positividad viral en tamizaje inmunoserológico.'
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_barrera_liberacion_serologica ON AnalisisInmunoSerologico;
-CREATE TRIGGER trg_barrera_liberacion_serologica
-AFTER INSERT OR UPDATE OF dictamenFinal ON AnalisisInmunoSerologico
-FOR EACH ROW
-EXECUTE FUNCTION fn_trg_barrera_liberacion_serologica();
--- ============================================================================
--- BANCO DE SANGRE "HEMOVIDA" - PROCEDIMIENTOS ALMACENADOS (PostgreSQL 14+)
--- ============================================================================
-
--- Procedimiento 1: Auto-Registro Público de Posible Donador (Sin Admin)
--- Crea la persona física, su cuenta de acceso, su registro inicial con estado No Apto,
--- tieneAnalisis = FALSE, y le asigna el rol Posible Donador.
-CREATE OR REPLACE PROCEDURE sp_autoregistro_posible_donador(
-    p_ci VARCHAR,
-    p_nombres VARCHAR,
-    p_apellidos VARCHAR,
-    p_sexo CHAR,
-    p_fechaNacimiento DATE,
-    p_direccion VARCHAR,
-    p_celular VARCHAR,
-    p_ocupacion VARCHAR,
-    p_username VARCHAR,
-    p_email VARCHAR,
-    p_passwordTextoPlano VARCHAR
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_idPersona INT;
-    v_idUsuario INT;
-    v_idRolPosible INT;
-BEGIN
-    -- Validación de contraseña segura
-    IF p_passwordTextoPlano !~ '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};'':"\\|,.<>\/?`~]).{8,}$' THEN
-        RAISE EXCEPTION 'La contraseña debe tener al menos 8 caracteres, 1 mayúscula, 1 minúscula, 1 número y 1 símbolo especial.';
-    END IF;
-
-    -- Sincronizar secuencias para prevenir 'duplicate key' por datos semilla cargados con IDs fijos
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'persona_idpersona_seq') THEN
-        PERFORM setval('persona_idpersona_seq', COALESCE((SELECT MAX(idpersona) FROM persona), 1));
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'usuario_idusuario_seq') THEN
-        PERFORM setval('usuario_idusuario_seq', COALESCE((SELECT MAX(idusuario) FROM usuario), 1));
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'bitacoraauditoria_idauditoria_seq') THEN
-        PERFORM setval('bitacoraauditoria_idauditoria_seq', COALESCE((SELECT MAX(idauditoria) FROM bitacoraauditoria), 1));
-    END IF;
-
-    -- 1. Crear Persona
-    INSERT INTO Persona (ci, nombres, apellidos, sexo, fechaNacimiento, direccion, celular, ocupacion, nacionalidad)
-    VALUES (p_ci, p_nombres, p_apellidos, p_sexo, p_fechaNacimiento, p_direccion, p_celular, p_ocupacion, 'Boliviana')
-    RETURNING idPersona INTO v_idPersona;
-
-    -- 2. Crear Cuenta de Usuario
-    INSERT INTO Usuario (idPersona, username, email, passwordHash, estado)
-    VALUES (v_idPersona, p_username, p_email, p_passwordTextoPlano, 'Activo')
-    RETURNING idUsuario INTO v_idUsuario;
-
-    -- 3. Crear Registro de Posible Donador (No Apto y sin análisis por defecto)
-    INSERT INTO PosibleDonador (idPersona, estadoAptitud, tieneAnalisis, fechaRegistroPostulante)
-    VALUES (v_idPersona, 'No Apto', FALSE, CURRENT_DATE);
-
-    -- 4. Asignar Rol Posible Donador
-    SELECT idRol INTO v_idRolPosible FROM Rol WHERE codigoRol = 'POSIBLE_DONADOR';
-    INSERT INTO UsuarioRol (idUsuario, idRol) VALUES (v_idUsuario, v_idRolPosible);
-
-    -- 5. Bitácora
-    INSERT INTO BitacoraAuditoria (idUsuario, rolActivo, accionRealizada, tablaAfectada, idRegistroAfectado, ipOrigen)
-    VALUES (v_idUsuario, 'Posible Donador', 'Auto-registro de postulante web', 'Usuario', v_idUsuario, '0.0.0.0');
-END;
-$$;
-
-
--- Procedimiento 2: Alta de Personal de Salud (Solo Ejecutable por Administrador)
--- Valida que quien ejecuta tenga el rol Administrador antes de crear el usuario y vincularlo a PersonalSalud.
-CREATE OR REPLACE PROCEDURE sp_crear_usuario_personal_salud(
-    p_idUsuarioAdmin INT,
-    p_ci VARCHAR,
-    p_nombres VARCHAR,
-    p_apellidos VARCHAR,
-    p_sexo CHAR,
-    p_fechaNacimiento DATE,
-    p_celular VARCHAR,
-    p_cargo VARCHAR,
-    p_registroProfesional VARCHAR,
-    p_username VARCHAR,
-    p_email VARCHAR,
-    p_passwordHash VARCHAR,
-    p_codigoRolAsignar VARCHAR
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_esAdmin BOOLEAN := FALSE;
-    v_idPersona INT;
-    v_idUsuarioNuevo INT;
-    v_idRol INT;
-BEGIN
-    -- 1. Validar privilegios del solicitante
-    SELECT EXISTS (
-        SELECT 1 FROM UsuarioRol ur
-        JOIN Rol r ON ur.idRol = r.idRol
-        WHERE ur.idUsuario = p_idUsuarioAdmin AND r.codigoRol = 'ADMIN'
-    ) INTO v_esAdmin;
-
-    IF NOT v_esAdmin THEN
-        RAISE EXCEPTION 'Acceso Denegado: Solo un usuario con rol Administrador puede crear personal de salud.';
-    END IF;
-
-    -- 2. Validar que el rol a asignar sea operativo/sanitario válido
-    SELECT idRol INTO v_idRol FROM Rol WHERE codigoRol = p_codigoRolAsignar;
-    IF v_idRol IS NULL OR p_codigoRolAsignar IN ('POSIBLE_DONADOR', 'DONANTE') THEN
-        RAISE EXCEPTION 'El rol especificado (%) no es un rol de personal operativo/salud válido.', p_codigoRolAsignar;
-    END IF;
-
-    -- Sincronizar secuencias para prevenir 'duplicate key' por datos semilla cargados con IDs fijos
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'persona_idpersona_seq') THEN
-        PERFORM setval('persona_idpersona_seq', COALESCE((SELECT MAX(idpersona) FROM persona), 1));
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'usuario_idusuario_seq') THEN
-        PERFORM setval('usuario_idusuario_seq', COALESCE((SELECT MAX(idusuario) FROM usuario), 1));
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'bitacoraauditoria_idauditoria_seq') THEN
-        PERFORM setval('bitacoraauditoria_idauditoria_seq', COALESCE((SELECT MAX(idauditoria) FROM bitacoraauditoria), 1));
-    END IF;
-
-    -- 3. Crear Persona
-    INSERT INTO Persona (ci, nombres, apellidos, sexo, fechaNacimiento, celular, ocupacion, nacionalidad)
-    VALUES (p_ci, p_nombres, p_apellidos, p_sexo, p_fechaNacimiento, p_celular, p_cargo, 'Boliviana')
-    RETURNING idPersona INTO v_idPersona;
-
-    -- 4. Registrar en PersonalSalud
-    INSERT INTO PersonalSalud (idPersona, cargo, registroProfesional)
-    VALUES (v_idPersona, p_cargo, p_registroProfesional);
-
-    -- 5. Crear Usuario
-    INSERT INTO Usuario (idPersona, username, email, passwordHash, estado)
-    VALUES (v_idPersona, p_username, p_email, p_passwordHash, 'Activo')
-    RETURNING idUsuario INTO v_idUsuarioNuevo;
-
-    -- 6. Asignar Rol Sanitario
-    INSERT INTO UsuarioRol (idUsuario, idRol) VALUES (v_idUsuarioNuevo, v_idRol);
-
-    -- 7. Registrar Auditoría
-    INSERT INTO BitacoraAuditoria (idUsuario, rolActivo, accionRealizada, tablaAfectada, idRegistroAfectado, ipOrigen)
-    VALUES (p_idUsuarioAdmin, 'Administrador', CONCAT('Alta de personal de salud: ', p_username, ' con rol ', p_codigoRolAsignar), 'Usuario', v_idUsuarioNuevo, '127.0.0.1');
-END;
-$$;
+CREATE INDEX idx_donante_carnet_lookup ON Donante(LOWER(TRIM(carnetDigitalCodigo)));
+CREATE INDEX idx_posible_carnet_lookup ON PosibleDonador(LOWER(TRIM(carnetProvisionalCodigo)));
+CREATE INDEX idx_persona_ci_lookup ON Persona(LOWER(TRIM(ci)));
