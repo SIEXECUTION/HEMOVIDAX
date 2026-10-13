@@ -109,6 +109,7 @@ class ExtraccionDonacion(models.Model):
         choices=[('Izquierdo', 'Izquierdo'), ('Derecho', 'Derecho')],
         db_column='brazoextraccion'
     )
+    idTriaje = models.IntegerField(null=True, blank=True, unique=True, db_column='idtriaje')
 
     class Meta:
         managed = False
