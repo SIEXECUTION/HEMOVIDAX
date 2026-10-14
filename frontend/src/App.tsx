@@ -29,7 +29,8 @@ import {
   MOCK_CLINICAL_TRIAJES,
   MOCK_LAB_ANALYSES,
   MOCK_BAJAS_INVENTARIO,
-  MOCK_INCENTIVOS_ENTREGA
+  MOCK_INCENTIVOS_ENTREGA,
+  MOCK_AUTOLOGOUS_PROGRAMS
 } from './data/mockData';
 import { 
   UserDonor, 
@@ -49,7 +50,8 @@ import {
   BajaInventarioRecord,
   IncentivoEntregaRecord,
   EmergencyActRecord,
-  CompatibilityTestRecord
+  CompatibilityTestRecord,
+  AutologousProgramRecord
 } from './types';
 import { generateForensicIp } from './utils/security';
 import { apiService } from './services/api';
@@ -175,6 +177,18 @@ export default function App() {
     }
     return MOCK_APPOINTMENTS;
   });
+
+  const [autologousPrograms, setAutologousPrograms] = useState<AutologousProgramRecord[]>(() => {
+    const saved = localStorage.getItem('hemovida_autologous_programs');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return MOCK_AUTOLOGOUS_PROGRAMS; }
+    }
+    return MOCK_AUTOLOGOUS_PROGRAMS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hemovida_autologous_programs', JSON.stringify(autologousPrograms));
+  }, [autologousPrograms]);
 
   // CU03: Forensic Audit Logs (Normalización con tabla BitacoraAuditoria de PostgreSQL / Supabase)
   const normalizeAuditEntry = (evt: any): BitacoraAuditoria => {
@@ -1297,6 +1311,8 @@ export default function App() {
             setAppointments={setAppointments}
             incentivosEntrega={incentivosEntrega}
             setIncentivosEntrega={setIncentivosEntrega}
+            autologousPrograms={autologousPrograms}
+            setAutologousPrograms={setAutologousPrograms}
             staffAccount={session.staff || receptionStaff}
             onOpenChangePassword={() => setIsChangePasswordOpen(true)}
           />

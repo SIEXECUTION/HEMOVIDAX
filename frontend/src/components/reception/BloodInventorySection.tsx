@@ -33,18 +33,23 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
   inventory,
   onOpenDispatchModal
 }) => {
+  const [activeInventoryTab, setActiveInventoryTab] = useState<'disponibles' | 'autologas'>('disponibles');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
 
   const availableBags = inventory.filter(i => i.estado === 'Disponible');
+  const autologousBags = inventory.filter(i => i.esExclusivoAutologo || i.estado === 'Reservada');
+
+  const currentDisplayList = activeInventoryTab === 'disponibles' ? availableBags : autologousBags;
 
   // Filtered items
-  const filteredBags = availableBags.filter(bag => {
+  const filteredBags = currentDisplayList.filter(bag => {
     const matchesSearch = 
       bag.codigoBolsa.toLowerCase().includes(searchTerm.toLowerCase()) ||
       bag.componente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bag.ubicacionCamara.toLowerCase().includes(searchTerm.toLowerCase());
+      bag.ubicacionCamara.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (bag.pacienteAutologo && bag.pacienteAutologo.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const groupRhKey = `${bag.grupoSanguineo}${bag.factorRh === 'Positivo' ? '+' : '-'}`;
     const matchesGroup = selectedGroup === 'all' || groupRhKey === selectedGroup;
@@ -137,6 +142,39 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
 
       {/* Filter and Table Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        {/* Pestañas de Vista de Inventario (General vs Autólogo CU21) */}
+        <div className="px-5 pt-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveInventoryTab('disponibles')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+                activeInventoryTab === 'disponibles'
+                  ? 'border-rose-600 text-rose-700 bg-white shadow-2xs'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Droplet className="w-3.5 h-3.5" />
+              <span>Stock General Disponible ({availableBags.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveInventoryTab('autologas')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+                activeInventoryTab === 'autologas'
+                  ? 'border-purple-600 text-purple-700 bg-white shadow-2xs'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+              <span>Bolsas Autólogas Reservadas - CU21 ({autologousBags.length})</span>
+            </button>
+          </div>
+          {activeInventoryTab === 'autologas' && (
+            <span className="hidden sm:inline-block text-[11px] font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-3 py-1 rounded-full">
+              Custodia Térmica Exclusiva • Bloqueadas para Terceros
+            </span>
+          )}
+        </div>
+
         {/* Controls */}
         <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-3">
           {/* Search */}
@@ -146,7 +184,7 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por código de bolsa, componente..."
+              placeholder={activeInventoryTab === 'autologas' ? "Buscar por paciente o código..." : "Buscar por código de bolsa, componente..."}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white"
             />
           </div>
@@ -218,7 +256,19 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
                 filteredBags.map((bag) => (
                   <tr key={bag.id} className="hover:bg-rose-50/30 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                      {bag.codigoBolsa}
+                      <div className="flex items-center gap-1.5">
+                        <span>{bag.codigoBolsa}</span>
+                        {bag.esExclusivoAutologo && (
+                          <span className="text-[9px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                            CU21 Autólogo
+                          </span>
+                        )}
+                      </div>
+                      {bag.pacienteAutologo && (
+                        <span className="text-[10px] text-purple-700 block font-normal">
+                          Paciente: <strong>{bag.pacienteAutologo.nombre}</strong> (C.I. {bag.pacienteAutologo.ci})
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center gap-1 font-mono font-extrabold px-2 py-0.5 rounded text-xs ${
@@ -256,13 +306,19 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={onOpenDispatchModal}
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-[11px] cursor-pointer inline-flex items-center gap-1 transition-colors"
-                      >
-                        <Truck className="w-3 h-3" />
-                        Despachar
-                      </button>
+                      {bag.esExclusivoAutologo ? (
+                        <span className="text-[10px] font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg inline-block">
+                          Bloqueado a Terceros
+                        </span>
+                      ) : (
+                        <button
+                          onClick={onOpenDispatchModal}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-[11px] cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        >
+                          <Truck className="w-3 h-3" />
+                          Despachar
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

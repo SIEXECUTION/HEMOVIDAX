@@ -27,8 +27,10 @@ import {
   DonationRecord,
   StaffAccount,
   Appointment,
-  IncentivoEntregaRecord
+  IncentivoEntregaRecord,
+  AutologousProgramRecord
 } from '../../types';
+import { MOCK_AUTOLOGOUS_PROGRAMS } from '../../data/mockData';
 import { BloodInventorySection } from './BloodInventorySection';
 import { DispatchHistorySection } from './DispatchHistorySection';
 import { PatientReplacementSection } from './PatientReplacementSection';
@@ -37,6 +39,7 @@ import { DonationStatsHistory } from './DonationStatsHistory';
 import { NewDispatchModal } from './NewDispatchModal';
 import { NewDonorModal } from './NewDonorModal';
 import { ReceptionDonationModal } from './ReceptionDonationModal';
+import { AutologousDonationSection } from './AutologousDonationSection';
 
 interface ReceptionDeskViewProps {
   inventory: BloodInventoryItem[];
@@ -53,11 +56,13 @@ interface ReceptionDeskViewProps {
   setAppointments: React.Dispatch<React.SetStateAction<Appointment[]>>;
   incentivosEntrega: IncentivoEntregaRecord[];
   setIncentivosEntrega: React.Dispatch<React.SetStateAction<IncentivoEntregaRecord[]>>;
+  autologousPrograms?: AutologousProgramRecord[];
+  setAutologousPrograms?: React.Dispatch<React.SetStateAction<AutologousProgramRecord[]>>;
   staffAccount?: StaffAccount;
   onOpenChangePassword?: () => void;
 }
 
-export type ReceptionTab = 'viabilidad' | 'asistencia' | 'incentivos' | 'reposiciones' | 'estadisticas' | 'inventario';
+export type ReceptionTab = 'viabilidad' | 'asistencia' | 'incentivos' | 'reposiciones' | 'autologas' | 'estadisticas' | 'inventario';
 
 export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
   inventory,
@@ -74,10 +79,17 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
   setAppointments,
   incentivosEntrega,
   setIncentivosEntrega,
+  autologousPrograms,
+  setAutologousPrograms,
   staffAccount,
   onOpenChangePassword
 }) => {
   const [activeTab, setActiveTab] = useState<ReceptionTab>('viabilidad');
+
+  // CU21: Autologous programs state
+  const [internalAutologousPrograms, setInternalAutologousPrograms] = useState<AutologousProgramRecord[]>(MOCK_AUTOLOGOUS_PROGRAMS);
+  const activeAutologousPrograms = autologousPrograms || internalAutologousPrograms;
+  const setActiveAutologousPrograms = setAutologousPrograms || setInternalAutologousPrograms;
 
   // Modals state
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
@@ -91,6 +103,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
   const todayDateStr = new Date().toISOString().split('T')[0];
   const todayDonationsCount = allDonations.filter(d => d.fechaHora.startsWith(todayDateStr)).length;
   const voluntaryIncentivesCount = incentivosEntrega.length;
+  const autologousCount = activeAutologousPrograms.length;
 
   // Handlers
   const handleConfirmDispatch = (
@@ -234,7 +247,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
         </div>
 
         {/* Quick Highlights */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-white/10 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-5 border-t border-white/10 text-xs">
           <div>
             <span className="text-slate-400 text-[11px] block">Stock Disponible en Frío:</span>
             <strong className="text-lg font-mono font-bold text-white">{availableBagsCount} unidades</strong>
@@ -250,6 +263,18 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
           <div>
             <span className="text-slate-400 text-[11px] block">Incentivos Post-Extracción:</span>
             <strong className="text-lg font-mono font-bold text-rose-300">{voluntaryIncentivesCount} entregados</strong>
+          </div>
+          <div 
+            onClick={() => setActiveTab('autologas')}
+            className="cursor-pointer hover:bg-white/10 p-1.5 rounded-xl transition-all border border-purple-500/30 bg-purple-950/40"
+            title="Ir a gestión de Donación Autóloga (CU21)"
+          >
+            <span className="text-purple-300 text-[11px] block font-bold flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Autóloga (CU21):
+            </span>
+            <strong className="text-lg font-mono font-bold text-purple-200">
+              {autologousCount} pacientes &rarr;
+            </strong>
           </div>
         </div>
       </div>
@@ -278,6 +303,23 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
             activeTab === 'asistencia' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
           }`}>
             {appointments.filter(a => !a.asistenciaConfirmada).length} pendientes
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('autologas')}
+          className={`px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'autologas'
+              ? 'bg-purple-700 text-white shadow-xs'
+              : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-purple-500" />
+          <span>Donación Autóloga (CU21)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+            activeTab === 'autologas' ? 'bg-purple-900 text-purple-100' : 'bg-purple-200 text-purple-800 font-bold'
+          }`}>
+            {autologousCount}
           </span>
         </button>
 
@@ -481,6 +523,17 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
           onUpdateReplacement={(updated) => {
             setReplacements(prev => prev.map(r => r.id === updated.id ? updated : r));
           }}
+        />
+      )}
+
+      {/* TAB CU21: DONACIÓN AUTÓLOGA PROGRAMADA */}
+      {activeTab === 'autologas' && (
+        <AutologousDonationSection
+          programs={activeAutologousPrograms}
+          setPrograms={setActiveAutologousPrograms}
+          inventory={inventory}
+          setInventory={setInventory}
+          donors={donors}
         />
       )}
 

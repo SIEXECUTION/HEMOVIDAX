@@ -289,6 +289,68 @@ export const DashboardSummary: React.FC<DashboardSummaryProps> = ({
         </div>
       </div>
 
+      {/* CU21: Autologous Program Banner for Donor */}
+      {(user.tipoDonante === 'Autologo' || user.email === 'luiscamachorivera7@gmail.com') ? (
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-950 rounded-2xl p-6 text-white border border-purple-400/40 shadow-lg relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="bg-purple-600 text-white font-bold text-[11px] px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  CU21 Donación Autóloga Programada
+                </span>
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] px-2 py-0.5 rounded-full font-bold">
+                  En Custodia Fría
+                </span>
+              </div>
+              <h3 className="text-lg font-black font-['Outfit',sans-serif] tracking-tight">
+                Tu Sangre está Resguardada Exclusivamente para tu Cirugía Electiva
+              </h3>
+              <p className="text-xs text-purple-200 max-w-2xl leading-relaxed">
+                Intervención: <strong>Artroplastia Total de Cadera Izquierda</strong> • Fecha Programada: <strong>05 de Noviembre de 2026</strong> en el <strong>Hospital Universitario Japonés</strong>.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
+                <span className="bg-white/10 px-2.5 py-1 rounded-lg border border-white/20 text-purple-100 font-bold">
+                  Bolsa GR: MAD-2026-AUT-01-GR (4.0°C)
+                </span>
+                <span className="bg-white/10 px-2.5 py-1 rounded-lg border border-white/20 text-purple-100 font-bold">
+                  Bolsa Plasma: MAD-2026-AUT-01-PL (-30.2°C)
+                </span>
+                <span className="text-amber-300 font-sans text-[11px]">
+                  Bloqueada contra terceros por norma sanitaria.
+                </span>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-2">
+              <span className="px-4 py-2 rounded-xl bg-white/15 text-white font-bold text-xs border border-white/20">
+                Ord. Médica: ORD-QX-2026-0891
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl p-4 border border-purple-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-purple-900">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-purple-200 text-purple-800 flex items-center justify-center font-bold shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <strong className="block text-purple-950 font-bold">¿Tienes una intervención quirúrgica electiva programada? (CU21)</strong>
+              <span className="text-purple-700 text-[11px]">
+                Coordina con tu cirujano para donar tu propia sangre de forma anticipada. Quedará en custodia exclusiva con bloqueo a terceros.
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('citas')}
+            className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-lg shrink-0 cursor-pointer transition-colors"
+          >
+            Consultar Requisitos
+          </button>
+        </div>
+      )}
+
       {/* Two Column Layout: Next Appointment & Quick Centers */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Next Appointment Card */}

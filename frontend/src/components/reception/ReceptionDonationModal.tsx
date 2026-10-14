@@ -43,8 +43,12 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
   const [donorId, setDonorId] = useState<number>(selectedDonor?.id || donors[0]?.id || 1);
   const currentDonor = donors.find(d => d.id === donorId) || donors[0];
 
-  // Tipo de donación
-  const [tipoDonante, setTipoDonante] = useState<'Voluntario Altruista' | 'Reposicion Familiar'>('Voluntario Altruista');
+  // Tipo de donación (CU09: Voluntario, CU20: Reposición, CU21: Autólogo)
+  const [tipoDonante, setTipoDonante] = useState<'Voluntario Altruista' | 'Reposicion Familiar' | 'Autologo'>('Voluntario Altruista');
+
+  // Paciente autólogo / orden médica
+  const [pacienteAutologoFechaCirugia, setPacienteAutologoFechaCirugia] = useState('');
+  const [pacienteAutologoOrdenMedica, setPacienteAutologoOrdenMedica] = useState('ORD-CIR-2026-');
 
   // Incentivo exclusivo para donantes voluntarios: Vaso o Llavero
   const [incentivoVoluntario, setIncentivoVoluntario] = useState<'Vaso Conmemorativo' | 'Llavero Oficial'>('Vaso Conmemorativo');
@@ -239,6 +243,9 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
     const expCp = new Date();
     expCp.setDate(expCp.getDate() + 5);
 
+    const isAutologo = tipoDonante === 'Autologo';
+    const initialBagState = isAutologo ? 'Reservada' : 'En Cuarentena';
+
     const newInventoryBags: BloodInventoryItem[] = [
       {
         id: `inv-${Date.now()}-1`,
@@ -252,7 +259,13 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
         fechaExtraccion: todayDateStr,
         fechaCaducidad: expCgr.toISOString().split('T')[0],
         diasRestantes: 35,
-        estado: 'En Cuarentena',
+        estado: initialBagState,
+        esExclusivoAutologo: isAutologo,
+        pacienteAutologo: isAutologo ? {
+          nombre: `${currentDonor.nombres} ${currentDonor.apellidos}`,
+          ci: currentDonor.ci,
+          fechaCirugia: pacienteAutologoFechaCirugia || undefined
+        } : undefined,
         ubicacionCamara: 'Cámara Fría A - Bandeja 1',
         temperaturaCamara: '4.0 °C'
       },
@@ -268,7 +281,13 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
         fechaExtraccion: todayDateStr,
         fechaCaducidad: expPfc.toISOString().split('T')[0],
         diasRestantes: 365,
-        estado: 'En Cuarentena',
+        estado: initialBagState,
+        esExclusivoAutologo: isAutologo,
+        pacienteAutologo: isAutologo ? {
+          nombre: `${currentDonor.nombres} ${currentDonor.apellidos}`,
+          ci: currentDonor.ci,
+          fechaCirugia: pacienteAutologoFechaCirugia || undefined
+        } : undefined,
         ubicacionCamara: 'Ultra-Freezer -30°C B-1',
         temperaturaCamara: '-28.0 °C'
       },
@@ -284,7 +303,13 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
         fechaExtraccion: todayDateStr,
         fechaCaducidad: expCp.toISOString().split('T')[0],
         diasRestantes: 5,
-        estado: 'En Cuarentena',
+        estado: initialBagState,
+        esExclusivoAutologo: isAutologo,
+        pacienteAutologo: isAutologo ? {
+          nombre: `${currentDonor.nombres} ${currentDonor.apellidos}`,
+          ci: currentDonor.ci,
+          fechaCirugia: pacienteAutologoFechaCirugia || undefined
+        } : undefined,
         ubicacionCamara: 'Agitador Plaquetario Incubado 22°C',
         temperaturaCamara: '22.0 °C'
       }
@@ -449,11 +474,11 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                 2. Seleccione el Tipo de Donación *
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Option A: Voluntario Altruista */}
                 <div
                   onClick={() => setTipoDonante('Voluntario Altruista')}
-                  className={`p-4 rounded-xl border-2 transition-all cursor-pointer relative ${
+                  className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer relative ${
                     tipoDonante === 'Voluntario Altruista'
                       ? 'border-rose-600 bg-rose-50/60 shadow-xs'
                       : 'border-slate-200 bg-white hover:border-slate-300'
@@ -461,15 +486,15 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold">
-                        <Sparkles className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold">
+                        <Sparkles className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">
-                          Donación Voluntaria Altruista
+                        <h4 className="font-bold text-slate-900 text-xs">
+                          Voluntaria Altruista
                         </h4>
-                        <span className="text-[10px] text-rose-700 font-bold uppercase tracking-wider">
-                          Entrega de Incentivo Exclusivo
+                        <span className="text-[9px] text-rose-700 font-bold uppercase tracking-wider">
+                          Incentivo Oficial
                         </span>
                       </div>
                     </div>
@@ -478,18 +503,18 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                       name="tipoDonante"
                       checked={tipoDonante === 'Voluntario Altruista'}
                       onChange={() => setTipoDonante('Voluntario Altruista')}
-                      className="text-rose-600 focus:ring-rose-500 h-4 w-4 mt-1"
+                      className="text-rose-600 focus:ring-rose-500 h-3.5 w-3.5 mt-0.5"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-2">
-                    Donación desinteresada para la reserva general del banco. Recibe por normativa un <strong>Vaso</strong> o un <strong>Llavero oficial</strong> de recuerdo.
+                  <p className="text-[10px] text-slate-600 mt-2 leading-tight">
+                    Reserva general del banco. Recibe vaso o llavero oficial.
                   </p>
                 </div>
 
                 {/* Option B: Reposición Familiar */}
                 <div
                   onClick={() => setTipoDonante('Reposicion Familiar')}
-                  className={`p-4 rounded-xl border-2 transition-all cursor-pointer relative ${
+                  className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer relative ${
                     tipoDonante === 'Reposicion Familiar'
                       ? 'border-blue-600 bg-blue-50/60 shadow-xs'
                       : 'border-slate-200 bg-white hover:border-slate-300'
@@ -497,15 +522,15 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
-                        <UserCheck className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
+                        <UserCheck className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">
-                          Reposición Familiar / Dirigida
+                        <h4 className="font-bold text-slate-900 text-xs">
+                          Reposición Familiar
                         </h4>
-                        <span className="text-[10px] text-blue-700 font-bold uppercase tracking-wider">
-                          A nombre de un paciente
+                        <span className="text-[9px] text-blue-700 font-bold uppercase tracking-wider">
+                          Para Paciente
                         </span>
                       </div>
                     </div>
@@ -514,15 +539,85 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                       name="tipoDonante"
                       checked={tipoDonante === 'Reposicion Familiar'}
                       onChange={() => setTipoDonante('Reposicion Familiar')}
-                      className="text-blue-600 focus:ring-blue-500 h-4 w-4 mt-1"
+                      className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 mt-0.5"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-2">
-                    Destinada a cubrir la cuota de sangre de un paciente específico internado en un centro de salud. Descuenta de su historial de reposición.
+                  <p className="text-[10px] text-slate-600 mt-2 leading-tight">
+                    Para reponer cuota biológica de paciente hospitalizado.
+                  </p>
+                </div>
+
+                {/* Option C: Autólogo Programado (CU21) */}
+                <div
+                  onClick={() => setTipoDonante('Autologo')}
+                  className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer relative ${
+                    tipoDonante === 'Autologo'
+                      ? 'border-purple-600 bg-purple-50/60 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold">
+                        <Heart className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">
+                          Autóloga Programada
+                        </h4>
+                        <span className="text-[9px] text-purple-700 font-bold uppercase tracking-wider">
+                          Cirugía Electiva (CU21)
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="tipoDonante"
+                      checked={tipoDonante === 'Autologo'}
+                      onChange={() => setTipoDonante('Autologo')}
+                      className="text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 mt-0.5"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-2 leading-tight">
+                    Custodia exclusiva para su propia cirugía. Bloqueada a terceros.
                   </p>
                 </div>
               </div>
             </div>
+
+            {/* Sub-branch C: Formulario de Autólogo (CU21) */}
+            {tipoDonante === 'Autologo' && (
+              <div className="bg-purple-50/80 border border-purple-200 p-4 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-purple-950 font-bold text-xs">
+                  <Heart className="w-4 h-4 text-purple-700" />
+                  <span>Protocolo CU21: Custodia Exclusiva para Cirugía Electiva</span>
+                </div>
+                <p className="text-[11px] text-purple-900">
+                  Las unidades extraídas quedarán etiquetadas con <strong>esExclusivoAutologo = TRUE</strong> y estado <strong>Reservada</strong> bajo custodia térmica hasta el día de la intervención del paciente titular <strong>{currentDonor?.nombres} {currentDonor?.apellidos} (C.I. {currentDonor?.ci})</strong>.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-bold text-purple-950 mb-1">Fecha Programada de Cirugía:</label>
+                    <input
+                      type="date"
+                      value={pacienteAutologoFechaCirugia}
+                      onChange={(e) => setPacienteAutologoFechaCirugia(e.target.value)}
+                      className="w-full bg-white border border-purple-300 rounded-lg px-3 py-1.5 font-bold text-purple-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-purple-950 mb-1">Orden Médica Quirúrgica:</label>
+                    <input
+                      type="text"
+                      placeholder="Ej. ORD-CIR-2026-781"
+                      value={pacienteAutologoOrdenMedica}
+                      onChange={(e) => setPacienteAutologoOrdenMedica(e.target.value)}
+                      className="w-full bg-white border border-purple-300 rounded-lg px-3 py-1.5 font-mono font-bold text-purple-950"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sub-branch A: Incentivo exclusivo solo si es Voluntario Altruista */}
             {tipoDonante === 'Voluntario Altruista' ? (

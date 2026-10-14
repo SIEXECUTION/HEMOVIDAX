@@ -16,7 +16,8 @@ import {
   PretransfusionOrder,
   EmergencyActRecord,
   CompatibilityTestRecord,
-  IncentivoEntregaRecord
+  IncentivoEntregaRecord,
+  AutologousProgramRecord
 } from '../types';
 
 export const MOCK_STAFF_ACCOUNTS: StaffAccount[] = [
@@ -145,6 +146,28 @@ export const MOCK_USERS: UserDonor[] = [
     totalDonaciones: 12,
     volumenHistoricoMl: 5400,
     password: 'HemoVida#2026'
+  },
+  {
+    id: 4,
+    ci: '6948210 SC',
+    nombres: 'Luis Alberto',
+    apellidos: 'Camacho Rivera',
+    email: 'luiscamachorivera7@gmail.com',
+    celular: '+591 710-92834',
+    sexo: 'M',
+    fechaNacimiento: '1988-06-24',
+    nacionalidad: 'Boliviana',
+    direccion: 'Av. San Martín, Condominio El Roble #302',
+    ocupacion: 'Docente Universitario',
+    tipoDonante: 'Autologo',
+    carnetDigitalCodigo: 'HV-DON-AUT-2026-004',
+    grupoSanguineo: 'O',
+    factorRh: 'Positivo',
+    fechaUltimaDonacion: '2026-10-10',
+    estadoHabilitacion: 'Apto',
+    totalDonaciones: 1,
+    volumenHistoricoMl: 450,
+    password: 'Password#2026'
   }
 ];
 
@@ -641,6 +664,54 @@ export const MOCK_DONATIONS: DonationRecord[] = [
 ];
 
 export const MOCK_INVENTORY: BloodInventoryItem[] = [
+  {
+    id: 'inv-aut-1',
+    codigoBolsa: 'MAD-2026-AUT-01-GR',
+    codigoBolsaMadre: 'MAD-2026-AUT-01',
+    codigoExtraccion: 'EXT-AUT-2026-001',
+    componente: 'Concentrado de Globulos Rojos',
+    grupoSanguineo: 'O',
+    factorRh: 'Positivo',
+    volumenMl: 250,
+    fechaExtraccion: '2026-10-10',
+    fechaCaducidad: '2026-11-15',
+    diasRestantes: 32,
+    estado: 'Reservada',
+    ubicacionCamara: 'Cámara Fría A - Bandeja Cuarentena Autóloga #1',
+    temperaturaCamara: '4.0°C',
+    esExclusivoAutologo: true,
+    pacienteAutologo: {
+      nombre: 'Luis Alberto Camacho Rivera',
+      ci: '6948210 SC',
+      fechaCirugia: '2026-11-05',
+      centroSalud: 'Hospital Universitario Japonés (Quirófano Central)',
+      ordenMedica: 'ORD-QX-2026-0891 (Dr. Roberto Salinas)'
+    }
+  },
+  {
+    id: 'inv-aut-2',
+    codigoBolsa: 'MAD-2026-AUT-01-PL',
+    codigoBolsaMadre: 'MAD-2026-AUT-01',
+    codigoExtraccion: 'EXT-AUT-2026-001',
+    componente: 'Plasma Fresco Congelado',
+    grupoSanguineo: 'O',
+    factorRh: 'Positivo',
+    volumenMl: 150,
+    fechaExtraccion: '2026-10-10',
+    fechaCaducidad: '2027-10-10',
+    diasRestantes: 361,
+    estado: 'Reservada',
+    ubicacionCamara: 'Ultra-Freezer -30°C - Compartimento Autólogo B-9',
+    temperaturaCamara: '-30.2°C',
+    esExclusivoAutologo: true,
+    pacienteAutologo: {
+      nombre: 'Luis Alberto Camacho Rivera',
+      ci: '6948210 SC',
+      fechaCirugia: '2026-11-05',
+      centroSalud: 'Hospital Universitario Japonés (Quirófano Central)',
+      ordenMedica: 'ORD-QX-2026-0891 (Dr. Roberto Salinas)'
+    }
+  },
   {
     id: 'inv-1',
     codigoBolsa: 'MAD-2026-0920-K1-GR',
@@ -1404,6 +1475,54 @@ export const MOCK_INCENTIVOS_ENTREGA: IncentivoEntregaRecord[] = [
     flebotomiaConfirmadaPreviamente: true,
     fechaHora: '2026-05-10T10:15:00',
     responsableEntrega: 'Lic. Patricia Arteaga'
+  }
+];
+
+// CU21: Programas de Donación Autóloga Programada (Cirugías Electivas)
+export const MOCK_AUTOLOGOUS_PROGRAMS: AutologousProgramRecord[] = [
+  {
+    idPrograma: 'PROG-AUT-2026-001',
+    idDonante: 4,
+    nombrePaciente: 'Luis Alberto Camacho Rivera',
+    ciPaciente: '6948210 SC',
+    telefono: '+591 710-92834',
+    email: 'luiscamachorivera7@gmail.com',
+    grupoSanguineo: 'O',
+    factorRh: 'Positivo',
+    diagnosticoCirugia: 'Artroplastia Total de Cadera Izquierda (Cirugía Electiva)',
+    fechaCirugiaProgramada: '2026-11-05',
+    centroSaludQuirurgico: 'Hospital Universitario Japonés (Pabellón A - Quirófano 2)',
+    medicoPrescriptor: 'Dr. Roberto Salinas (Traumatología y Ortopedia - MP-7712)',
+    ordenMedicaNumero: 'ORD-QX-2026-0891',
+    hemoglobinaPrevia: 14.2,
+    volumenRequeridoMl: 450,
+    estadoPrograma: 'En Custodia Fria',
+    fechaExtraccion: '2026-10-10',
+    codigoBolsaAsignada: 'MAD-2026-AUT-01-GR',
+    codigoBolsaPlasma: 'MAD-2026-AUT-01-PL',
+    ubicacionCamara: 'Cámara Fría A - Bandeja Cuarentena Autóloga #1 (4.0°C)',
+    observaciones: 'Flebotomía autóloga exitosa. 1 Concentrado de Glóbulos Rojos (250ml) y 1 Plasma Fresco Congelado (150ml) en custodia estricta. Bloqueado contra despacho a terceros bajo norma transfusional.'
+  },
+  {
+    idPrograma: 'PROG-AUT-2026-002',
+    nombrePaciente: 'María René Cuéllar Saucedo',
+    ciPaciente: '5821094 SC',
+    telefono: '+591 721-88990',
+    email: 'mrene.cuellar@gmail.com',
+    grupoSanguineo: 'A',
+    factorRh: 'Positivo',
+    diagnosticoCirugia: 'Reemplazo Valvular Mitral Programado',
+    fechaCirugiaProgramada: '2026-11-12',
+    centroSaludQuirurgico: 'Clínica Foianini (Unidad Quirúrgica Cardiovascular)',
+    medicoPrescriptor: 'Dr. Marcelo Justiniano (Cirugía Cardiovascular - MP-5420)',
+    ordenMedicaNumero: 'ORD-QX-2026-1044',
+    hemoglobinaPrevia: 13.8,
+    volumenRequeridoMl: 450,
+    estadoPrograma: 'Extraccion Programada',
+    fechaExtraccion: '2026-10-20',
+    codigoBolsaAsignada: 'Pendiente Flebotomía (Cita Agendada)',
+    ubicacionCamara: 'Reserva Pendiente',
+    observaciones: 'Evaluación pre-quirúrgica aprobada. Donación programada para el 20 de octubre con al menos 23 días de margen previo al acto quirúrgico.'
   }
 ];
 

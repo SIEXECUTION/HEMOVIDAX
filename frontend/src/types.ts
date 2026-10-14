@@ -136,6 +136,14 @@ export interface BloodInventoryItem {
   estado: 'Disponible' | 'Despachada' | 'En Cuarentena' | 'Baja / Descarte' | 'Reservada';
   ubicacionCamara: string;
   temperaturaCamara?: string;
+  esExclusivoAutologo?: boolean;
+  pacienteAutologo?: {
+    nombre: string;
+    ci: string;
+    fechaCirugia?: string;
+    centroSalud?: string;
+    ordenMedica?: string;
+  };
 }
 
 export interface BloodDispatchRecord {
@@ -496,4 +504,29 @@ export interface IncentivoEntregaRecord {
   flebotomiaConfirmadaPreviamente: boolean;
   fechaHora: string;
   responsableEntrega: string;
+}
+
+// CU21: Donación Autóloga Programada para Cirugías Electivas
+export interface AutologousProgramRecord {
+  idPrograma: string;
+  idDonante?: number;
+  nombrePaciente: string;
+  ciPaciente: string;
+  telefono: string;
+  email?: string;
+  grupoSanguineo: BloodGroup;
+  factorRh: RhFactor;
+  diagnosticoCirugia: string;
+  fechaCirugiaProgramada: string;
+  centroSaludQuirurgico: string;
+  medicoPrescriptor: string;
+  ordenMedicaNumero: string;
+  hemoglobinaPrevia: number;
+  volumenRequeridoMl: number;
+  estadoPrograma: 'En Evaluacion' | 'Extraccion Programada' | 'En Custodia Fria' | 'Despachado a Quirofano' | 'Baja Sanitaria';
+  fechaExtraccion?: string;
+  codigoBolsaAsignada?: string;
+  codigoBolsaPlasma?: string;
+  ubicacionCamara?: string;
+  observaciones?: string;
 }
