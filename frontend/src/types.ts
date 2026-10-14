@@ -282,9 +282,16 @@ export interface Appointment {
   centroNombre: string;
   centroDireccion: string;
   fechaHoraProgramada: string;
-  modalidad: 'Sangre Total' | 'Aferesis Plaquetaria' | 'Reposicion Familiar' | 'Brigada Movil';
+  modalidad: 'Sangre Total' | 'Aferesis Plaquetaria' | 'Reposicion Familiar' | 'Brigada Movil' | 'Autologo';
   pacienteReceptor?: string;
   hospitalDestino?: string;
+  datosAutologo?: {
+    cirugia: string;
+    fechaCirugia: string;
+    medicoCirujano: string;
+    ordenMedica: string;
+    hospital: string;
+  };
   prefiltroAprobado: boolean;
   prefiltroDetalle?: {
     respuestas: Record<number, boolean>;

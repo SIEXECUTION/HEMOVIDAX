@@ -40,9 +40,16 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
   );
   const [selectedDate, setSelectedDate] = useState<string>('2026-09-28');
   const [selectedTime, setSelectedTime] = useState<string>('09:00');
-  const [modalidad, setModalidad] = useState<'Sangre Total' | 'Aferesis Plaquetaria' | 'Reposicion Familiar'>('Sangre Total');
+  const [modalidad, setModalidad] = useState<'Sangre Total' | 'Aferesis Plaquetaria' | 'Reposicion Familiar' | 'Autologo'>('Sangre Total');
   const [pacienteReceptor, setPacienteReceptor] = useState('');
   const [hospitalDestino, setHospitalDestino] = useState('');
+
+  // CU21: Campos de Cirugía para Donación Autóloga
+  const [autologoCirugia, setAutologoCirugia] = useState('Artroplastia Total de Cadera');
+  const [autologoFechaCirugia, setAutologoFechaCirugia] = useState('2026-11-20');
+  const [autologoMedico, setAutologoMedico] = useState('Dr. Roberto Salinas (MP-7712)');
+  const [autologoOrden, setAutologoOrden] = useState('ORD-QX-2026-1102');
+  const [autologoHospital, setAutologoHospital] = useState('Hospital Universitario Japonés');
   
   // Prefiltro Checklist
   const [checkEdad, setCheckEdad] = useState(true);
@@ -72,6 +79,13 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
       modalidad,
       pacienteReceptor: modalidad === 'Reposicion Familiar' ? pacienteReceptor : undefined,
       hospitalDestino: modalidad === 'Reposicion Familiar' ? hospitalDestino : undefined,
+      datosAutologo: modalidad === 'Autologo' ? {
+        cirugia: autologoCirugia,
+        fechaCirugia: autologoFechaCirugia,
+        medicoCirujano: autologoMedico,
+        ordenMedica: autologoOrden,
+        hospital: autologoHospital
+      } : undefined,
       prefiltroAprobado: prefiltroOk,
       asistenciaConfirmada: false,
       estadoCita: 'Programada',
@@ -368,7 +382,7 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   3. Modalidad de Donación
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setModalidad('Sangre Total')}
@@ -402,6 +416,17 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                   >
                     Reposición Familiar
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalidad('Autologo')}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold text-center cursor-pointer transition-all ${
+                      modalidad === 'Autologo'
+                        ? 'bg-purple-100 border-purple-600 text-purple-900 shadow-xs font-bold'
+                        : 'border-purple-200 bg-purple-50/50 hover:bg-purple-100 text-purple-800'
+                    }`}
+                  >
+                    ✨ Autóloga (CU21)
+                  </button>
                 </div>
               </div>
 
@@ -432,6 +457,83 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                       className="w-full text-xs p-2 bg-white border border-amber-300 rounded-lg"
                     />
                   </div>
+                </div>
+              )}
+
+              {modalidad === 'Autologo' && (
+                <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-300 space-y-3 text-xs">
+                  <div className="flex items-center gap-2 text-purple-900 font-bold">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    <span>Protocolo de Autotransfusión Preoperatoria (CU21)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-950 mb-1">
+                        Cirugía / Intervención Electiva *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Artroplastia Total de Cadera"
+                        value={autologoCirugia}
+                        onChange={(e) => setAutologoCirugia(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-purple-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-950 mb-1">
+                        Fecha Programada de Cirugía *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={autologoFechaCirugia}
+                        onChange={(e) => setAutologoFechaCirugia(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-purple-300 rounded-xl focus:ring-2 focus:ring-purple-500 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-950 mb-1">
+                        Centro Hospitalario
+                      </label>
+                      <input
+                        type="text"
+                        value={autologoHospital}
+                        onChange={(e) => setAutologoHospital(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-purple-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-950 mb-1">
+                        Médico Cirujano
+                      </label>
+                      <input
+                        type="text"
+                        value={autologoMedico}
+                        onChange={(e) => setAutologoMedico(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-purple-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-950 mb-1">
+                        N° Orden Quirúrgica
+                      </label>
+                      <input
+                        type="text"
+                        value={autologoOrden}
+                        onChange={(e) => setAutologoOrden(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-purple-300 rounded-xl font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-purple-800 bg-white/80 p-2.5 rounded-xl border border-purple-200 leading-tight">
+                    🔒 <strong>Custodia Estricta:</strong> La bolsa recolectada se etiquetará como <code className="text-purple-900 font-mono">esExclusivoAutologo = TRUE</code> y quedará en reserva en frío para tu cirugía. Si la cirugía se suspende, se somete a baja sanitaria biológica (CU15), jamás a terceros.
+                  </p>
                 </div>
               )}
 

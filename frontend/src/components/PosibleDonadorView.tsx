@@ -244,6 +244,32 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* CU21: Donación Autóloga para Cirugías Programadas */}
+          <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-2.5 text-xs text-purple-950">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold flex items-center gap-2 text-purple-900">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                ¿Tienes una intervención quirúrgica programada? (Donación Autóloga - CU21)
+              </h4>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-purple-200/80 text-purple-800 font-mono">
+                CU21 Autólogo
+              </span>
+            </div>
+            <p className="text-[11px] text-purple-800 leading-relaxed">
+              Si vas a someterte a una cirugía electiva, puedes solicitar con tu médico cirujano donar tu propia sangre de forma anticipada. Los criterios de selección son especiales y más flexibles (hemoglobina ≥ 11.0 g/dL y orden médica). La sangre se reserva en cadena de frío exclusivamente para ti con bloqueo a terceros.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={onOpenPrecheck}
+                className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
+              >
+                <span>Hacer Prefiltro Autólogo (CU21)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
 
       </div>
