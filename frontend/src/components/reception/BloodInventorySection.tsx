@@ -37,6 +37,7 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
+  const [selectedCategoriaEtaria, setSelectedCategoriaEtaria] = useState<string>('all');
 
   const availableBags = inventory.filter(i => i.estado === 'Disponible');
   const autologousBags = inventory.filter(i => i.esExclusivoAutologo || i.estado === 'Reservada');
@@ -54,8 +55,10 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
     const groupRhKey = `${bag.grupoSanguineo}${bag.factorRh === 'Positivo' ? '+' : '-'}`;
     const matchesGroup = selectedGroup === 'all' || groupRhKey === selectedGroup;
     const matchesComponent = selectedComponent === 'all' || bag.componente === selectedComponent;
+    const bagCategoria = bag.categoriaEtaria || 'Adulto';
+    const matchesCategoria = selectedCategoriaEtaria === 'all' || bagCategoria === selectedCategoriaEtaria;
 
-    return matchesSearch && matchesGroup && matchesComponent;
+    return matchesSearch && matchesGroup && matchesComponent && matchesCategoria;
   });
 
   return (
@@ -142,7 +145,7 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
 
       {/* Filter and Table Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        {/* Pestañas de Vista de Inventario (General vs Autólogo CU21) */}
+        {/* Pestañas de Vista de Inventario (General vs Autólogo) */}
         <div className="px-5 pt-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-2">
             <button
@@ -165,7 +168,7 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-              <span>Bolsas Autólogas Reservadas - CU21 ({autologousBags.length})</span>
+              <span>Bolsas Autólogas Reservadas ({autologousBags.length})</span>
             </button>
           </div>
           {activeInventoryTab === 'autologas' && (
@@ -216,11 +219,23 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
               ))}
             </select>
 
-            {(selectedGroup !== 'all' || selectedComponent !== 'all' || searchTerm) && (
+            <select
+              value={selectedCategoriaEtaria}
+              onChange={(e) => setSelectedCategoriaEtaria(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500"
+            >
+              <option value="all">Todas las Categorías</option>
+              <option value="Adulto">Adulto</option>
+              <option value="Adolescente">Adolescente</option>
+              <option value="Pediátrico">Pediátrico</option>
+            </select>
+
+            {(selectedGroup !== 'all' || selectedComponent !== 'all' || selectedCategoriaEtaria !== 'all' || searchTerm) && (
               <button
                 onClick={() => {
                   setSelectedGroup('all');
                   setSelectedComponent('all');
+                  setSelectedCategoriaEtaria('all');
                   setSearchTerm('');
                 }}
                 className="text-[11px] text-rose-600 hover:text-rose-800 font-bold whitespace-nowrap cursor-pointer px-2"
@@ -260,7 +275,7 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
                         <span>{bag.codigoBolsa}</span>
                         {bag.esExclusivoAutologo && (
                           <span className="text-[9px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                            CU21 Autólogo
+                            Autólogo Reservado
                           </span>
                         )}
                       </div>
@@ -281,7 +296,16 @@ export const BloodInventorySection: React.FC<BloodInventorySectionProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-4 font-medium text-slate-800">
-                      {bag.componente}
+                      <div>{bag.componente}</div>
+                      <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 ${
+                        (bag.categoriaEtaria || 'Adulto') === 'Pediátrico'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : (bag.categoriaEtaria || 'Adulto') === 'Adolescente'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'
+                      }`}>
+                        {bag.categoriaEtaria || 'Adulto'}
+                      </span>
                     </td>
                     <td className="py-3 px-4 font-mono">
                       {bag.volumenMl} ml

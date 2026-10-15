@@ -103,7 +103,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
     return diffDays;
   };
 
-  // Handler: Register New Autologous Program (CU21)
+  // Handler: Register New Autologous Program
   const handleCreateProgram = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNombre || !newCi || !newCirugia || !newFechaCirugia) {
@@ -145,7 +145,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
     alert(`¡Programa Autólogo ${newId} creado con éxito para ${newNombre}! Puede programar la flebotomía o emitir el Certificado de Custodia.`);
   };
 
-  // Handler: Confirm Autologous Extraction (CU21 / Flebotomía)
+  // Handler: Confirm Autologous Extraction (Flebotomía)
   const handlePerformExtraction = (program: AutologousProgramRecord) => {
     const codMadre = `MAD-2026-AUT-${String(Math.floor(10 + Math.random() * 90))}`;
     const codBolsaGR = `${codMadre}-GR`;
@@ -224,7 +224,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
     alert(`¡Flebotomía Autóloga Registrada con Éxito!\n\nSe fraccionaron 2 unidades:\n1. ${codBolsaGR} (Concentrado Eritrocitario 250ml)\n2. ${codBolsaPL} (Plasma Fresco 150ml)\n\nAmbas quedan marcadas con esExclusivoAutologo = TRUE y custodia reservada para ${program.nombrePaciente}.`);
   };
 
-  // Handler: Baja Sanitaria por Suspensión Quirúrgica (CU15 / CU21)
+  // Handler: Baja Sanitaria por Suspensión Quirúrgica
   const handleBajaSanitaria = (program: AutologousProgramRecord) => {
     const reason = window.prompt(
       `ATENCIÓN SANITARIA:\nBajo la norma transfusional, la sangre autóloga NO puede transferirse a otros pacientes.\n\nIndique el motivo de la baja / descarte sanitario (ej. 'Cirugía cancelada por el cirujano / Infección intercurrente'):`,
@@ -258,19 +258,19 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
       return p;
     }));
 
-    alert(`Se ha registrado la baja sanitaria biológica (CU15/CU21) para el paciente ${program.nombrePaciente}.\nLas bolsas asociadas han sido retiradas de reserva y enviadas a incineración.`);
+    alert(`Se ha registrado la baja sanitaria biológica para el paciente ${program.nombrePaciente}.\nLas bolsas asociadas han sido retiradas de reserva y enviadas a incineración.`);
   };
 
   return (
     <div className="space-y-6">
-      {/* CU21 Regulatory & Clinical Header */}
+      {/* Regulatory & Clinical Header */}
       <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-purple-800/40 relative overflow-hidden">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="bg-purple-600 text-white font-bold text-[11px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
                 <Sparkles className="w-3.5 h-3.5" />
-                Caso de Uso CU21 Oficial
+                Protocolo de Donación Autóloga
               </span>
               <span className="bg-white/10 text-white/90 text-[11px] px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-purple-300" />
@@ -295,7 +295,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
               className="px-5 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-102"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Nueva Programación Autóloga (CU21)</span>
+              <span>+ Nueva Programación Autóloga</span>
             </button>
           </div>
         </div>
@@ -305,7 +305,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
           <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <strong className="text-white">Normativa de Seguridad Transfusional (PRONAHEBAS / HemoVida):</strong>{' '}
-            Las bolsas autólogas se mantienen separadas del stock ordinario. Si la intervención quirúrgica del paciente se cancela o no requiere transfusión, la sangre <strong>NUNCA</strong> ingresa al stock general de terceros por razones inmunológicas y de consentimiento informado; se procede a la incineración bajo acta de descarte biológico (CU15).
+            Las bolsas autólogas se mantienen separadas del stock ordinario. Si la intervención quirúrgica del paciente se cancela o no requiere transfusión, la sangre <strong>NUNCA</strong> ingresa al stock general de terceros por razones inmunológicas y de consentimiento informado; se procede a la incineración bajo acta de descarte biológico controlado.
           </div>
         </div>
 
@@ -395,7 +395,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
             <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="font-bold text-sm text-slate-700">No se encontraron programas de donación autóloga</p>
-            <p className="text-xs text-slate-400 mt-1">Crea una nueva solicitud con el botón "+ Nueva Programación Autóloga (CU21)".</p>
+            <p className="text-xs text-slate-400 mt-1">Crea una nueva solicitud con el botón "+ Nueva Programación Autóloga".</p>
           </div>
         ) : (
           filteredPrograms.map(program => {
@@ -483,7 +483,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-purple-900 font-bold text-[11px] flex items-center gap-1">
                         <Droplet className="w-3.5 h-3.5 text-purple-600" />
-                        Unidades Autólogas en Custodia (CU21):
+                        Unidades Autólogas en Custodia:
                       </span>
                       <span className="text-[10px] font-mono font-bold bg-purple-200/80 text-purple-900 px-2 py-0.5 rounded">
                         PROHIBIDO DESPACHO A TERCEROS
@@ -529,7 +529,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                     className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 hover:text-purple-700 text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer transition-colors border border-slate-200"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Certificado de Custodia (CU21)</span>
+                    <span>Certificado de Custodia</span>
                   </button>
 
                   <button
@@ -544,7 +544,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                     <button
                       onClick={() => handleBajaSanitaria(program)}
                       className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold flex items-center gap-1.5 cursor-pointer transition-colors border border-rose-200"
-                      title="Si la cirugía se cancela, se destruye la unidad bajo norma sanitaria CU15"
+                      title="Si la cirugía se cancela, se destruye la unidad bajo norma sanitaria de descarte biológico"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Baja Sanitaria por Suspensión</span>
@@ -635,7 +635,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
       </div>
 
       {/* ========================================================= */}
-      {/* MODAL 1: NUEVA SOLICITUD DE PROGRAMACIÓN AUTÓLOGA (CU21) */}
+      {/* MODAL 1: NUEVA SOLICITUD DE PROGRAMACIÓN AUTÓLOGA */}
       {/* ========================================================= */}
       {isNewModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
@@ -653,7 +653,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
               </div>
               <div>
                 <span className="text-xs font-bold text-purple-600 uppercase tracking-wider block">
-                  Caso de Uso CU21
+                  Protocolo de Donación Autóloga
                 </span>
                 <h2 className="text-xl font-black text-slate-900 font-['Outfit',sans-serif]">
                   Nueva Solicitud de Donación Autóloga Programada
@@ -839,7 +839,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                     className="mt-1 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
                   />
                   <span className="text-slate-600 leading-tight">
-                    Certifico que el paciente cuenta con prescripción quirúrgica verificada y consiente la custodia exclusiva con bloqueo a terceros bajo el protocolo CU21.
+                    Certifico que el paciente cuenta con prescripción quirúrgica verificada y consiente la custodia exclusiva con bloqueo a terceros bajo el protocolo de donación autóloga.
                   </span>
                 </label>
               </div>
@@ -858,7 +858,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                   disabled={!newAceptaCondiciones}
                   className="px-6 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold transition-all shadow-md shadow-purple-900/30 cursor-pointer"
                 >
-                  Registrar Solicitud CU21
+                  Registrar Solicitud Autóloga
                 </button>
               </div>
             </form>
@@ -867,7 +867,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
       )}
 
       {/* ========================================================= */}
-      {/* MODAL 2: CERTIFICADO OFICIAL DE CUSTODIA AUTÓLOGA (CU21) */}
+      {/* MODAL 2: CERTIFICADO OFICIAL DE CUSTODIA AUTÓLOGA */}
       {/* ========================================================= */}
       {selectedProgramForCert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
@@ -889,7 +889,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                 Red Departamental de Transfusión Sanguínea • Santa Cruz de la Sierra
               </p>
               <h2 className="text-lg font-black text-purple-900 font-mono tracking-tight mt-2 uppercase">
-                CERTIFICADO OFICIAL DE RESERVA Y CUSTODIA AUTÓLOGA (CU21)
+                CERTIFICADO OFICIAL DE RESERVA Y CUSTODIA AUTÓLOGA
               </h2>
               <span className="inline-block bg-purple-100 text-purple-900 font-mono font-bold text-xs px-3 py-0.5 rounded-full border border-purple-300">
                 CÓDIGO PROTOCOLO: {selectedProgramForCert.idPrograma}
@@ -956,7 +956,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
                   Cláusula Obligatoria de Custodia e Intransferibilidad
                 </strong>
                 <p className="text-[11px] leading-relaxed">
-                  Las unidades certificadas fueron extraídas exclusivamente para el titular arriba mencionado bajo el protocolo CU21. <strong>QUEDA TERMINANTEMENTE PROHIBIDO SU USO O TRASPASO A CUALQUIER OTRO PACIENTE.</strong> Si la cirugía es suspendida o los componentes no son requeridos, las bolsas deben ser remitidas al Banco de Sangre para su incineración sanitaria controlada (CU15).
+                  Las unidades certificadas fueron extraídas exclusivamente para el titular arriba mencionado bajo el protocolo de Donación Autóloga. <strong>QUEDA TERMINANTEMENTE PROHIBIDO SU USO O TRASPASO A CUALQUIER OTRO PACIENTE.</strong> Si la cirugía es suspendida o los componentes no son requeridos, las bolsas deben ser remitidas al Banco de Sangre para su incineración sanitaria controlada.
                 </p>
               </div>
 
@@ -1022,7 +1022,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
               </div>
               <div>
                 <h2 className="text-base font-black text-slate-900 font-['Outfit',sans-serif]">
-                  Trazabilidad de Custodia Autóloga (CU21)
+                  Trazabilidad de Custodia Autóloga
                 </h2>
                 <span className="text-slate-400 font-mono text-[11px]">{selectedProgramForDetails.idPrograma}</span>
               </div>
@@ -1038,7 +1038,7 @@ export const AutologousDonationSection: React.FC<AutologousDonationSectionProps>
               <div className="space-y-2 border-l-2 border-purple-500 pl-4 py-1">
                 <div className="relative">
                   <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-purple-600 ring-4 ring-white" />
-                  <p className="font-bold text-slate-800">1. Registro de Solicitud Quirúrgica (CU21)</p>
+                  <p className="font-bold text-slate-800">1. Registro de Solicitud Quirúrgica</p>
                   <p className="text-slate-500 text-[11px]">Orden médica {selectedProgramForDetails.ordenMedicaNumero} autorizada por {selectedProgramForDetails.medicoPrescriptor}.</p>
                 </div>
 

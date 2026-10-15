@@ -1,6 +1,6 @@
 """
-Serializadores para Seguridad, Autenticación y Auditoría (CU01, CU02, CU03)
-adaptados al modelo relacional con RBAC múltiple (UsuarioRol) y Stored Procedures.
+Serializadores para Seguridad, Autenticación y Auditoría
+adaptados al modelo relacional con RBAC múltiple (UsuarioRol).
 """
 from rest_framework import serializers
 from django.db import connection, transaction
@@ -11,9 +11,9 @@ from .utils import generate_tokens_for_usuario, get_client_ip, registrar_auditor
 
 class LoginSerializer(serializers.Serializer):
     """
-    Serializador para el Caso de Uso [CU01]: Iniciar Sesión.
+    Serializador de Autenticación de Usuario.
     Valida credenciales institucionales, estado activo y genera respuesta estructurada
-    con selector de perfiles ('rolesDisponibles') de acuerdo al diseño técnico (Pág 20 del PDF).
+    con selector de perfiles ('rolesDisponibles').
     """
     username = serializers.CharField(required=True, trim_whitespace=True)
     password = serializers.CharField(required=True, write_only=True)
@@ -31,7 +31,7 @@ class LoginSerializer(serializers.Serializer):
         except Usuario.DoesNotExist:
             raise serializers.ValidationError({"detail": "Credenciales inválidas. Usuario no encontrado."})
 
-        # Verificar si la cuenta ya está inhabilitada o bloqueada (CU01 Excepción E2)
+        # Verificar si la cuenta ya está inhabilitada o bloqueada
         if usuario.estado in ('Bloqueado', 'Bloqueado Temporal'):
             raise serializers.ValidationError({
                 "detail": "Acceso denegado. La cuenta se encuentra bloqueada por superar el límite de intentos fallidos. Contacte al Administrador del Sistema para su rehabilitación."
@@ -439,12 +439,19 @@ class UsuarioEstadoUpdateSerializer(serializers.Serializer):
 
 class BitacoraAuditoriaSerializer(serializers.ModelSerializer):
     """
-    Serializador para el Caso de Uso [CU03]: Consulta y Auditoría Forense.
+    Serializador para Consulta y Auditoría Forense.
     Incluye rolActivo y datos extendidos de Usuario y Persona.
     """
-    idUsuario = serializers.IntegerField(source='usuario.idUsuario', default=None, allow_null=True)
-    username = serializers.CharField(source='usuario.username', default='Sistema / Anónimo')
-    nombreRol = serializers.CharField(source='rolActivo', default='N/A')
+    idAuditoria = serializers.IntegerField(source='idauditoria', read_only=True)
+    idUsuario = serializers.IntegerField(source='idusuario.idusuario', default=None, allow_null=True)
+    username = serializers.CharField(source='idusuario.username', default='Sistema / Anónimo')
+    nombreRol = serializers.CharField(source='rolactivo', default='N/A')
+    rolActivo = serializers.CharField(source='rolactivo', default='N/A')
+    accionRealizada = serializers.CharField(source='accionrealizada', read_only=True)
+    tablaAfectada = serializers.CharField(source='tablaafectada', read_only=True)
+    idRegistroAfectado = serializers.IntegerField(source='idregistroafectado', read_only=True, allow_null=True)
+    fechaHora = serializers.DateTimeField(source='fechahora', read_only=True)
+    ipOrigen = serializers.CharField(source='iporigen', read_only=True, allow_null=True)
     funcionario = serializers.SerializerMethodField()
     ci = serializers.SerializerMethodField()
     nacionalidad = serializers.SerializerMethodField()

@@ -45,7 +45,7 @@ export const DoctorTriageView: React.FC<DoctorTriageViewProps> = ({
   onConfirmTriage,
   onOpenChangePassword
 }) => {
-  // Pending donors who confirmed attendance (CU08) or are scheduled
+  // Pending donors who confirmed attendance or are scheduled
   const waitingDonors = appointments.filter(a => a.asistenciaConfirmada && a.estadoCita === 'En Espera Triaje' || a.estadoCita === 'Programada');
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(
@@ -439,7 +439,7 @@ export const DoctorTriageView: React.FC<DoctorTriageViewProps> = ({
               </div>
             </div>
 
-            {/* Dictamen Médico (CU11) */}
+            {/* Dictamen Médico */}
             <div className="pt-4 border-t border-slate-200 space-y-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />

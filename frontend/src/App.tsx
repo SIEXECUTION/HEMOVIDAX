@@ -190,7 +190,7 @@ export default function App() {
     localStorage.setItem('hemovida_autologous_programs', JSON.stringify(autologousPrograms));
   }, [autologousPrograms]);
 
-  // CU03: Forensic Audit Logs (Normalización con tabla BitacoraAuditoria de PostgreSQL / Supabase)
+  // Forensic Audit Logs (Normalización con tabla BitacoraAuditoria de PostgreSQL / Supabase)
   const normalizeAuditEntry = (evt: any): BitacoraAuditoria => {
     const idAuditoria = typeof evt.idAuditoria === 'number' ? evt.idAuditoria : (typeof evt.id_registro === 'number' ? evt.id_registro : undefined);
     const idEvento = evt.idAuditoria ? `AUD-${evt.idAuditoria}` : (evt.idEvento || `EVT-${Date.now()}`);
@@ -276,7 +276,7 @@ export default function App() {
     fetchAuditLogs();
   }, []);
 
-  // CU04: Stock Threshold Config
+  // Stock Threshold Config
   const [stockThresholds, setStockThresholds] = useState<StockThresholdConfig[]>(() => {
     const saved = localStorage.getItem('hemovida_stock_thresholds');
     if (saved) {
@@ -285,7 +285,7 @@ export default function App() {
     return MOCK_STOCK_THRESHOLDS;
   });
 
-  // CU10 / CU11: Clinical Triajes
+  // Clinical Triajes
   const [triajes, setTriajes] = useState<ClinicalTriageRecord[]>(() => {
     const saved = localStorage.getItem('hemovida_clinical_triajes');
     if (saved) {
@@ -294,7 +294,7 @@ export default function App() {
     return MOCK_CLINICAL_TRIAJES;
   });
 
-  // CU13 / CU14: Parallel Lab Analyses
+  // Parallel Lab Analyses
   const [labAnalyses, setLabAnalyses] = useState<LaboratoryAnalysisRecord[]>(() => {
     const saved = localStorage.getItem('hemovida_lab_analyses');
     if (saved) {
@@ -303,7 +303,7 @@ export default function App() {
     return MOCK_LAB_ANALYSES;
   });
 
-  // CU14: Bajas Inventario
+  // Bajas Inventario
   const [bajasInventario, setBajasInventario] = useState<BajaInventarioRecord[]>(() => {
     const saved = localStorage.getItem('hemovida_bajas_inventario');
     if (saved) {
@@ -312,7 +312,7 @@ export default function App() {
     return MOCK_BAJAS_INVENTARIO;
   });
 
-  // CU09: Incentivos Entrega
+  // Incentivos Entrega
   const [incentivosEntrega, setIncentivosEntrega] = useState<IncentivoEntregaRecord[]>(() => {
     const saved = localStorage.getItem('hemovida_incentivos_entrega');
     if (saved) {
@@ -634,7 +634,7 @@ export default function App() {
     setAuditLogs(prev => [auditEntry, ...prev]);
   };
 
-  // Authentication & Session Handlers (CU01 / CU02 / CU03)
+  // Authentication & Session Handlers
   const handleSelectAccount = (selection: AccountLoginSelection) => {
     if (selection.type === 'session') {
       const sess = selection.session;
@@ -653,7 +653,7 @@ export default function App() {
       }
       setActiveTab('inicio');
 
-      // CU03: Log event in forensic audit log
+      // Log event in forensic audit log
       const auditEntry: BitacoraAuditoria = {
         idEvento: `EVT-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -724,7 +724,7 @@ export default function App() {
       });
     }
 
-    // CU03: Log event in forensic audit log
+    // Log event in forensic audit log
     const actorName = selection.type === 'donante' 
       ? `${selection.user.nombres} ${selection.user.apellidos}` 
       : selection.staff.nombre;
@@ -953,7 +953,7 @@ export default function App() {
     setActiveTab('citas');
   };
 
-  // CU10 / CU11: Doctor confirms triage
+  // Doctor confirms triage
   const handleConfirmDoctorTriage = (
     triageRecord: ClinicalTriageRecord,
     updatedDonor: UserDonor,
@@ -1388,7 +1388,7 @@ export default function App() {
         )}
 
         {/* ======================================================== */}
-        {/* ESTADO 5: CUENTA MÉDICA DE TRIAJE CLÍNICO (CU10/11)      */}
+        {/* ESTADO 5: CUENTA MÉDICA DE TRIAJE CLÍNICO                 */}
         {/* ======================================================== */}
         {(activeRole === 'DOC_TRIAJE' || session?.role === 'medico') && (
           <DoctorTriageView
@@ -1402,7 +1402,7 @@ export default function App() {
         )}
 
         {/* ======================================================== */}
-        {/* ESTADO 6: CUENTA DE BIOQUÍMICO DE LABORATORIO (CU12-15)  */}
+        {/* ESTADO 6: CUENTA DE BIOQUÍMICO DE LABORATORIO             */}
         {/* ======================================================== */}
         {(activeRole === 'BIOQ_INTEGRAL' || session?.role === 'bioquimico') && (
           <LabProcessingView

@@ -24,13 +24,15 @@ urlpatterns = [
 
     path('admin/', admin.site.urls),
     
-    # CU01, CU02, CU03: Seguridad, Autenticación, Usuarios, Personal y Auditoría
+    # Seguridad, Autenticación, Usuarios, Personal y Auditoría
     path('api/', include('apps.seguridad.urls')),
     
-    # CU04: Parámetros de Stock y Alertas Críticas
+    # Parámetros de Stock, Semáforo FEFO y Fraccionamiento
     path('api/stock/', include('apps.inventario.urls')),
+    path('api/inventario/', include('apps.inventario.urls')),
+    path('api/', include('apps.inventario.urls')),
     
-    # CU05: Carnet Digital y Donantes
+    # Carnet Digital y Donantes
     path('api/donantes/', include('apps.donantes.urls')),
 ]
 

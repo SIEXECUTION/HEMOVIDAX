@@ -1,6 +1,6 @@
 {
   "name": "Remix HemoVida - Banco de Sangre",
-  "description": "ARREGLO CASOS DE USO V1,",
+  "description": "Sistema de Gestión Integral de Banco de Sangre y Hemocomponentes",
   "requestFramePermissions": [
     "geolocation"
   ],

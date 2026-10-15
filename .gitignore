@@ -10,6 +10,13 @@ venv/
 ENV/
 .env
 
+# Base de datos y esquemas locales
+database/
+schema*.txt
+schema.txt
+*.sql
+backend/db.sqlite3
+
 # Node / React
 node_modules/
 dist/

@@ -289,7 +289,7 @@ export const DashboardSummary: React.FC<DashboardSummaryProps> = ({
         </div>
       </div>
 
-      {/* CU21: Autologous Program Banner for Donor */}
+      {/* Autologous Program Banner for Donor */}
       {(user.tipoDonante === 'Autologo' || user.email === 'luiscamachorivera7@gmail.com') ? (
         <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-950 rounded-2xl p-6 text-white border border-purple-400/40 shadow-lg relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -297,7 +297,7 @@ export const DashboardSummary: React.FC<DashboardSummaryProps> = ({
               <div className="flex items-center gap-2">
                 <span className="bg-purple-600 text-white font-bold text-[11px] px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
-                  CU21 Donación Autóloga Programada
+                  Donación Autóloga Programada
                 </span>
                 <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] px-2 py-0.5 rounded-full font-bold">
                   En Custodia Fría
@@ -336,7 +336,7 @@ export const DashboardSummary: React.FC<DashboardSummaryProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <strong className="block text-purple-950 font-bold">¿Tienes una intervención quirúrgica electiva programada? (CU21)</strong>
+              <strong className="block text-purple-950 font-bold">¿Tienes una intervención quirúrgica electiva programada?</strong>
               <span className="text-purple-700 text-[11px]">
                 Coordina con tu cirujano para donar tu propia sangre de forma anticipada. Quedará en custodia exclusiva con bloqueo a terceros.
               </span>

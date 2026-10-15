@@ -247,6 +247,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'x-active-role',
 ]
 
 # Internacionalización y Zona Horaria

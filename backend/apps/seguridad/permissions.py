@@ -19,7 +19,7 @@ class IsAdminRole(permissions.BasePermission):
 
         # Comprobar rol ADMIN en la tabla UsuarioRol
         if hasattr(request.user, 'roles'):
-            return request.user.roles.filter(codigoRol='ADMIN').exists()
+            return request.user.roles.filter(codigorol='ADMIN').exists()
         return False
 
 
@@ -45,5 +45,5 @@ class IsHealthStaffRole(permissions.BasePermission):
             'MED_SOLICITANTE'
         ]
         if hasattr(request.user, 'roles'):
-            return request.user.roles.filter(codigoRol__in=roles_salud).exists()
+            return request.user.roles.filter(codigorol__in=roles_salud).exists()
         return False

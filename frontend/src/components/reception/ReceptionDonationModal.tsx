@@ -43,7 +43,7 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
   const [donorId, setDonorId] = useState<number>(selectedDonor?.id || donors[0]?.id || 1);
   const currentDonor = donors.find(d => d.id === donorId) || donors[0];
 
-  // Tipo de donación (CU09: Voluntario, CU20: Reposición, CU21: Autólogo)
+  // Tipo de donación (Voluntario, Reposición, Autólogo)
   const [tipoDonante, setTipoDonante] = useState<'Voluntario Altruista' | 'Reposicion Familiar' | 'Autologo'>('Voluntario Altruista');
 
   // Paciente autólogo / orden médica
@@ -158,7 +158,7 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
       }
     }
 
-    // New donation record (CU12: whole blood mother bag in Quarantine + pilot tubes)
+    // New donation record (whole blood mother bag in Quarantine + pilot tubes)
     const tubosPilotoCodigos = [
       `${codigoBolsaMadre}-TUB-EDTA (Inmunohematología)`,
       `${codigoBolsaMadre}-TUB-SECO (Inmunoserología 6 marcadores)`
@@ -235,7 +235,7 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
       volumenHistoricoMl: currentDonor.volumenHistoricoMl + volumenMl
     };
 
-    // Add derived blood bags into inventory in QUARANTINE (CU15)
+    // Add derived blood bags into inventory in QUARANTINE
     const expCgr = new Date();
     expCgr.setDate(expCgr.getDate() + 35);
     const expPfc = new Date();
@@ -547,7 +547,7 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                   </p>
                 </div>
 
-                {/* Option C: Autólogo Programado (CU21) */}
+                {/* Option C: Autólogo Programado */}
                 <div
                   onClick={() => setTipoDonante('Autologo')}
                   className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer relative ${
@@ -566,7 +566,7 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
                           Autóloga Programada
                         </h4>
                         <span className="text-[9px] text-purple-700 font-bold uppercase tracking-wider">
-                          Cirugía Electiva (CU21)
+                          Cirugía Electiva (Autólogo)
                         </span>
                       </div>
                     </div>
@@ -585,12 +585,12 @@ export const ReceptionDonationModal: React.FC<ReceptionDonationModalProps> = ({
               </div>
             </div>
 
-            {/* Sub-branch C: Formulario de Autólogo (CU21) */}
+            {/* Sub-branch C: Formulario de Autólogo */}
             {tipoDonante === 'Autologo' && (
               <div className="bg-purple-50/80 border border-purple-200 p-4 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-purple-950 font-bold text-xs">
                   <Heart className="w-4 h-4 text-purple-700" />
-                  <span>Protocolo CU21: Custodia Exclusiva para Cirugía Electiva</span>
+                  <span>Protocolo de Custodia Exclusiva para Cirugía Electiva</span>
                 </div>
                 <p className="text-[11px] text-purple-900">
                   Las unidades extraídas quedarán etiquetadas con <strong>esExclusivoAutologo = TRUE</strong> y estado <strong>Reservada</strong> bajo custodia térmica hasta el día de la intervención del paciente titular <strong>{currentDonor?.nombres} {currentDonor?.apellidos} (C.I. {currentDonor?.ci})</strong>.

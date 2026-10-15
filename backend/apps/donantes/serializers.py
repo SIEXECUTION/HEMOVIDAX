@@ -1,5 +1,5 @@
 """
-Serializadores para la app Donantes (CU05) adaptados al modelo PosibleDonador / Donante.
+Serializadores para la app Donantes adaptados al modelo PosibleDonador / Donante.
 """
 from rest_framework import serializers
 from .models import Donante, PosibleDonador, ExtraccionDonacion
@@ -56,7 +56,7 @@ class PosibleDonadorResponseSerializer(serializers.Serializer):
 
 class CarnetDigitalResponseSerializer(serializers.Serializer):
     """
-    Serializador que estructura la salida del Carnet Digital (CU05)
+    Serializador que estructura la salida del Carnet Digital
     para donantes calificados que superaron el tamizaje serológico.
     """
     esPosibleDonador = serializers.BooleanField(default=False)

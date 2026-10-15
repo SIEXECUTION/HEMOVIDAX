@@ -1,10 +1,11 @@
 """
-Vistas de API REST para Seguridad, Autenticación y Auditoría (CU01, CU02, CU03)
+Vistas de API REST para Seguridad, Autenticación y Auditoría
 con soporte para RBAC múltiple, Auto-registro de Posible Donador y Alta de Personal de Salud.
 """
 import os
 import random
-from datetime import date
+from datetime import date, timedelta
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -15,7 +16,7 @@ from django.db.models.functions import ExtractHour
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.conf import settings
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 
 from .models import Usuario, PersonalSalud, BitacoraAuditoria, Rol, UsuarioRol, Persona
 from .serializers import (
@@ -31,43 +32,184 @@ from .utils import get_client_ip, registrar_auditoria, enviar_correo_institucion
 from .validators import validate_password_complexity
 
 # ============================================================================
-# [CU01] Autenticar Usuario e Iniciar Sesión (Selector de Perfiles)
+# Autenticar Usuario e Iniciar Sesión
 # ============================================================================
-class LoginView(APIView):
-    """
-    Endpoint: POST /api/auth/login/
-    Autentica credenciales institucionales, verifica estado 'Activo'
-    y retorna la estructura de consumo con 'rolesDisponibles' para el modal selector de perfiles.
-    """
+def get_client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '127.0.0.1')
+
+
+class AutenticarUsuarioView(APIView):
+    """Login con bloqueo progresivo (15m, 30m, 60m) y soporte multi-rol."""
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        data = serializer.validated_data
-        usuario_info = data['usuario']
-        user_id = usuario_info['idUsuario']
-
-        # Auditoría automática del acceso exitoso
-        try:
-            usuario = Usuario.objects.select_related('persona').prefetch_related('roles').get(idUsuario=user_id)
-            ip_origen = get_client_ip(request)
-            primer_rol = usuario.roles.first()
-            rol_nombre = primer_rol.nombreRol if primer_rol else 'Posible Donador'
-            registrar_auditoria(
-                usuario=usuario,
-                accion='Inicio de Sesión Exitoso',
-                tabla='Usuario',
-                id_registro=user_id,
-                ip_origen=ip_origen,
-                rol_activo=rol_nombre
+        identificador = request.data.get('identificador', '').strip()
+        if not identificador:
+            identificador = request.data.get('username', '').strip()
+        password = request.data.get('password', '')
+        ip = get_client_ip(request)
+        usuario = Usuario.objects.filter(
+            Q(username__iexact=identificador) | Q(email__iexact=identificador)
+        ).first()
+        if not usuario:
+            return Response({'error': 'Credenciales inválidas.', 'detail': 'Credenciales inválidas.'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        ahora = timezone.now()
+        # 1. Verificar si está bloqueado permanentemente
+        if usuario.estado in ['Bloqueado', 'Inactivo']:
+            msg = f'La cuenta se encuentra en estado {usuario.estado}. Contacte al Administrador.'
+            return Response({'error': msg, 'detail': msg}, status=status.HTTP_403_FORBIDDEN)
+        # 2. Verificar ventana de bloqueo temporal activa
+        if usuario.estado == 'Bloqueado Temporal' and usuario.fechabloqueohasta:
+            if usuario.fechabloqueohasta > ahora:
+                restante = int((usuario.fechabloqueohasta - ahora).total_seconds() // 60) + 1
+                return Response({
+                    'error': f'Cuenta bloqueada temporalmente por seguridad. Intente nuevamente en {restante} minuto(s).',
+                    'bloqueado_hasta': usuario.fechabloqueohasta
+                }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                # Expiró el tiempo de bloqueo temporal: rehabilitar a Activo
+                usuario.estado = 'Activo'
+                usuario.intentosfallidos = 0
+                usuario.fechabloqueohasta = None
+                usuario.save()
+        # 3. Comprobar contraseña (soporta hash PBKDF2/Argon2 y texto plano de semillas iniciales)
+        es_valida = usuario.check_password(password) or check_password(password, usuario.passwordhash) or (usuario.passwordhash == password)
+        if not es_valida:
+            usuario.intentosfallidos += 1
+            if usuario.intentosfallidos >= 3:
+                usuario.totalbloqueosrecibidos += 1
+                if usuario.totalbloqueosrecibidos == 1:
+                    minutos = 15
+                elif usuario.totalbloqueosrecibidos == 2:
+                    minutos = 30
+                else:
+                    minutos = 60
+                usuario.estado = 'Bloqueado Temporal'
+                usuario.fechabloqueohasta = ahora + timedelta(minutes=minutos)
+                usuario.save()
+                BitacoraAuditoria.objects.create(
+                    idusuario=usuario,
+                    rolactivo='Sistema',
+                    accionrealizada=f'Bloqueo temporal progresivo ({minutos} min) tras 3 intentos fallidos',
+                    tablaafectada='Usuario',
+                    idregistroafectado=usuario.idusuario,
+                    iporigen=ip
+                )
+                return Response({
+                    'error': f'Demasiados intentos fallidos. Cuenta bloqueada por {minutos} minutos.'
+                }, status=status.HTTP_403_FORBIDDEN)
+            usuario.save()
+            restantes = 3 - usuario.intentosfallidos
+            BitacoraAuditoria.objects.create(
+                idusuario=usuario,
+                rolactivo='Desconocido',
+                accionrealizada=f'Intento de inicio de sesión fallido ({usuario.intentosfallidos}/3)',
+                tablaafectada='Usuario',
+                idregistroafectado=usuario.idusuario,
+                iporigen=ip
             )
-        except Exception as e:
-            print(f"[WARN AUDITORIA LOGIN]: {e}")
+            msg = f'Contraseña incorrecta. Intentos restantes: {restantes}.'
+            return Response({'error': msg, 'detail': msg},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        # 4. Login Exitoso: Reiniciar contadores de fallo
+        usuario.intentosfallidos = 0
+        usuario.fechabloqueohasta = None
+        usuario.estado = 'Activo'
+        usuario.save()
+        roles_qs = UsuarioRol.objects.filter(idusuario=usuario).select_related('idrol')
+        roles = [{'codigo': ur.idrol.codigorol, 'nombre': ur.idrol.nombrerol} for ur in roles_qs]
+        rol_activo = request.headers.get('X-Active-Role') or (roles[0]['nombre'] if roles else 'Usuario')
+        BitacoraAuditoria.objects.create(
+            idusuario=usuario,
+            rolactivo=rol_activo,
+            accionrealizada='Inicio de Sesión Exitoso',
+            tablaafectada='Usuario',
+            idregistroafectado=usuario.idusuario,
+            iporigen=ip
+        )
 
-        return Response(data, status=status.HTTP_200_OK)
+        tokens = {}
+        try:
+            from .utils import generate_tokens_for_usuario
+            tokens = generate_tokens_for_usuario(usuario)
+        except Exception:
+            pass
+
+        roles_disponibles = [{'id': ur.idrol.idrol, 'codigo': ur.idrol.codigorol, 'nombre': ur.idrol.nombrerol} for ur in roles_qs]
+        persona_obj = getattr(usuario, 'idpersona', None)
+        nombre_completo = persona_obj.nombreCompleto if hasattr(persona_obj, 'nombreCompleto') else usuario.username
+
+        return Response({
+            'idusuario': usuario.idusuario,
+            'idpersona': usuario.idpersona_id,
+            'username': usuario.username,
+            'email': usuario.email,
+            'roles': roles,
+            'requiere_selector_rol': len(roles) > 1,
+            # Compatibilidad frontend y tokens JWT
+            'token': tokens.get('access', ''),
+            'tokens': tokens,
+            'rolesDisponibles': roles_disponibles,
+            'usuarioId': usuario.idusuario,
+            'nombreCompleto': nombre_completo,
+            'usuario': {
+                'idUsuario': usuario.idusuario,
+                'username': usuario.username,
+                'email': usuario.email,
+                'estado': usuario.estado,
+                'roles': roles_disponibles,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+LoginView = AutenticarUsuarioView
+
+
+class DesbloquearUsuarioAdminView(APIView):
+    """Rehabilitación manual de cuentas bloqueadas por el Administrador."""
+    permission_classes = [AllowAny]
+
+    def post(self, request, idusuario_objetivo):
+        ip = get_client_ip(request)
+        admin_id = request.data.get('idusuario_admin')
+        
+        is_admin = False
+        admin_user = None
+        if request.user and request.user.is_authenticated:
+            if hasattr(request.user, 'roles') and request.user.roles.filter(codigorol='ADMIN').exists():
+                is_admin = True
+                admin_user = request.user
+        elif admin_id:
+            admin_user = Usuario.objects.filter(idusuario=admin_id, estado='Activo').first()
+            if admin_user and admin_user.roles.filter(codigorol='ADMIN').exists():
+                is_admin = True
+
+        if not is_admin:
+            return Response(
+                {'error': 'Se requieren privilegios de Administrador para desbloquear cuentas.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        usuario = Usuario.objects.filter(idusuario=idusuario_objetivo).first()
+        if not usuario:
+            return Response({'error': 'Usuario no encontrado.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        usuario.intentosfallidos = 0
+        usuario.fechabloqueohasta = None
+        usuario.estado = 'Activo'
+        usuario.save()
+        BitacoraAuditoria.objects.create(
+            idusuario=admin_user,
+            rolactivo='Administrador',
+            accionrealizada=f'Desbloqueo manual de cuenta de usuario {usuario.username}',
+            tablaafectada='Usuario',
+            idregistroafectado=usuario.idusuario,
+            iporigen=ip
+        )
+        return Response({'mensaje': f'Cuenta {usuario.username} rehabilitada a estado Activo.'},
+                        status=status.HTTP_200_OK)
 
 
 # ============================================================================
@@ -159,7 +301,7 @@ class CrearPersonalSaludView(APIView):
 
 
 # ============================================================================
-# [CU02] Matriz de Personal de Salud Clasificados por Rol Institucional
+# Matriz de Personal de Salud Clasificados por Rol Institucional
 # ============================================================================
 class PersonalSaludListView(APIView):
     """
@@ -207,7 +349,7 @@ class UsuarioEstadoUpdateView(APIView):
         ip_origen = get_client_ip(request)
         registrar_auditoria(
             usuario=request.user,
-            accion=f"Actualización de estado de usuario '{usuario.username}': {estado_anterior} -> {nuevo_estado} (CU02 Desbloqueo/Gestión)",
+            accion=f"Actualización de estado de usuario '{usuario.username}': {estado_anterior} -> {nuevo_estado}",
             tabla='Usuario',
             id_registro=usuario.idUsuario,
             ip_origen=ip_origen,
@@ -224,7 +366,7 @@ class UsuarioEstadoUpdateView(APIView):
 
 
 # ============================================================================
-# [CU03] Consultar y Auditar Bitácora de Eventos Forenses
+# Consultar y Auditar Bitácora de Eventos Forenses
 # ============================================================================
 class BitacoraAuditoriaListView(APIView):
     """
@@ -242,18 +384,18 @@ class BitacoraAuditoriaListView(APIView):
 
     def get(self, request):
         queryset = BitacoraAuditoria.objects.select_related(
-            'usuario',
-            'usuario__persona'
-        ).prefetch_related('usuario__roles').all()
+            'idusuario',
+            'idusuario__idpersona'
+        ).prefetch_related('idusuario__roles').all()
 
         # Filtro especial: Operaciones fuera del turno central 19:00 - 07:00
         fuera_turno = request.query_params.get('fuera_turno', '').lower() in ('true', '1')
         if fuera_turno:
             roles_lab = ['BIOQ_INTEGRAL', 'Bioquímico(a) Integral', 'Bioquímico Serólogo', 'TEC_LOGISTICA']
             queryset = queryset.filter(
-                Q(rolActivo__in=roles_lab) | Q(usuario__roles__codigoRol__in=roles_lab)
+                Q(rolactivo__in=roles_lab) | Q(idusuario__roles__codigorol__in=roles_lab)
             ).annotate(
-                hora=ExtractHour('fechaHora')
+                hora=ExtractHour('fechahora')
             ).filter(
                 Q(hora__lt=7) | Q(hora__gt=19)
             )
@@ -261,46 +403,46 @@ class BitacoraAuditoriaListView(APIView):
         # Filtro por rango de fechas
         fecha_inicio = request.query_params.get('fecha_inicio')
         if fecha_inicio:
-            queryset = queryset.filter(fechaHora__date__gte=fecha_inicio)
+            queryset = queryset.filter(fechahora__date__gte=fecha_inicio)
 
         fecha_fin = request.query_params.get('fecha_fin')
         if fecha_fin:
-            queryset = queryset.filter(fechaHora__date__lte=fecha_fin)
+            queryset = queryset.filter(fechahora__date__lte=fecha_fin)
 
         # Filtro por usuario
         id_usuario = request.query_params.get('id_usuario')
         if id_usuario:
-            queryset = queryset.filter(usuario__idUsuario=id_usuario)
+            queryset = queryset.filter(idusuario__idusuario=id_usuario)
 
         # Filtro por rol activo
         rol_activo_param = request.query_params.get('rol_activo') or request.query_params.get('rolActivo')
         if rol_activo_param and rol_activo_param.lower() != 'all':
-            queryset = queryset.filter(rolActivo__icontains=rol_activo_param)
+            queryset = queryset.filter(rolactivo__icontains=rol_activo_param)
 
         # Filtro por tabla afectada
         tabla_afectada = request.query_params.get('tabla_afectada')
         if tabla_afectada and tabla_afectada.lower() != 'all':
             tablas = [t.strip() for t in tabla_afectada.split(',') if t.strip()]
             if len(tablas) == 1:
-                queryset = queryset.filter(tablaAfectada__iexact=tablas[0])
+                queryset = queryset.filter(tablaafectada__iexact=tablas[0])
             else:
-                queryset = queryset.filter(tablaAfectada__in=tablas)
+                queryset = queryset.filter(tablaafectada__in=tablas)
 
         # Búsqueda textual amplia (?q=)
         query_text = request.query_params.get('q', '').strip()
         if query_text:
             queryset = queryset.filter(
-                Q(accionRealizada__icontains=query_text) |
-                Q(tablaAfectada__icontains=query_text) |
-                Q(rolActivo__icontains=query_text) |
-                Q(ipOrigen__icontains=query_text) |
-                Q(usuario__username__icontains=query_text) |
-                Q(usuario__persona__nombres__icontains=query_text) |
-                Q(usuario__persona__apellidos__icontains=query_text) |
-                Q(usuario__persona__ci__icontains=query_text)
+                Q(accionrealizada__icontains=query_text) |
+                Q(tablaafectada__icontains=query_text) |
+                Q(rolactivo__icontains=query_text) |
+                Q(iporigen__icontains=query_text) |
+                Q(idusuario__username__icontains=query_text) |
+                Q(idusuario__idpersona__nombres__icontains=query_text) |
+                Q(idusuario__idpersona__apellidos__icontains=query_text) |
+                Q(idusuario__idpersona__ci__icontains=query_text)
             )
 
-        queryset = queryset.order_by('-fechaHora')
+        queryset = queryset.order_by('-fechahora')
 
         serializer = BitacoraAuditoriaSerializer(queryset, many=True)
         return Response({

@@ -137,6 +137,7 @@ export interface BloodInventoryItem {
   ubicacionCamara: string;
   temperaturaCamara?: string;
   esExclusivoAutologo?: boolean;
+  categoriaEtaria?: 'Adulto' | 'Adolescente' | 'Pediátrico';
   pacienteAutologo?: {
     nombre: string;
     ci: string;
@@ -200,7 +201,7 @@ export interface PatientReplacementRecord {
   hospital: string;
   fechaSolicitudInicial: string;
   unidadesRecibidas: number;
-  donantesRequeridos: number; // 1 unidad recibida = 1 donante efectivo (CU20)
+  donantesRequeridos: number; // 1 unidad recibida = 1 donante efectivo
   grupoReceptor?: string; // ej. O+
   donantesRepuestos: Array<{
     idDonacion: number;
@@ -331,10 +332,10 @@ export interface DonationCenter {
 }
 
 // ==========================================
-// NUEVAS ESTRUCTURAS CASOS DE USO CU01 - CU20
+// ESTRUCTURAS DE GESTIÓN Y OPERACIÓN CLÍNICA
 // ==========================================
 
-// CU03: Bitácora de Auditoría Forense (Mapeo completo con tabla PostgreSQL BitacoraAuditoria)
+// Bitácora de Auditoría Forense (Mapeo completo con tabla PostgreSQL BitacoraAuditoria)
 export interface BitacoraAuditoria {
   idAuditoria?: number;
   idEvento: string;
@@ -360,7 +361,7 @@ export interface BitacoraAuditoria {
   entidadId?: string;
 }
 
-// CU04: Parametrización de Umbrales de Stock
+// Parametrización de Umbrales de Stock
 export interface StockThresholdConfig {
   grupo: BloodGroup;
   factorRh: RhFactor;
@@ -369,7 +370,7 @@ export interface StockThresholdConfig {
   diasCaducidadAlerta: number;
 }
 
-// CU10 / CU11: Triaje Clínico Médico
+// Triaje Clínico Médico
 export interface ClinicalTriageRecord {
   idTriaje: string;
   idCita?: number;
@@ -394,7 +395,7 @@ export interface ClinicalTriageRecord {
   observacionesClinicas?: string;
 }
 
-// CU12: Bolsa Madre de Sangre Total
+// Bolsa Madre de Sangre Total
 export interface MotherBagRecord {
   codigoBolsaMadre: string;
   codigoExtraccion: string;
@@ -410,7 +411,7 @@ export interface MotherBagRecord {
   fraccionadaEnComponentes: boolean;
 }
 
-// CU13 / CU14: Análisis de Laboratorio
+// Análisis de Laboratorio
 export interface LaboratoryAnalysisRecord {
   idAnalisis: string;
   codigoExtraccion: string;
@@ -426,7 +427,7 @@ export interface LaboratoryAnalysisRecord {
   observacionesTecnicas?: string;
 }
 
-// CU14: Baja e Incineración por Descarte
+// Baja e Incineración por Descarte
 export interface BajaInventarioRecord {
   idBaja: string;
   codigoExtraccion: string;
@@ -440,7 +441,7 @@ export interface BajaInventarioRecord {
   actaBajaNumero: string;
 }
 
-// CU16: Solicitud Pretransfusional y Cirugía Programada
+// Solicitud Pretransfusional y Cirugía Programada
 export interface PretransfusionOrder {
   idSolicitud: string;
   codigoSolicitud: string;
@@ -459,7 +460,7 @@ export interface PretransfusionOrder {
   estado: 'Muestra Pendiente' | 'Muestra Recibida' | 'Pruebas Compatibilidad en Proceso' | 'Listo para Despacho';
 }
 
-// CU17: Acta de Responsabilidad de Extrema Urgencia (Código Rojo)
+// Acta de Responsabilidad de Extrema Urgencia (Código Rojo)
 export interface EmergencyActRecord {
   idActa: string;
   codigoSolicitud: string;
@@ -476,7 +477,7 @@ export interface EmergencyActRecord {
   responsableBancoSangre: string;
 }
 
-// CU18: Pruebas Cruzadas de Compatibilidad in vitro
+// Pruebas Cruzadas de Compatibilidad in vitro
 export interface CompatibilityTestRecord {
   idPrueba: string;
   codigoSolicitud: string;
@@ -498,7 +499,7 @@ export interface CompatibilityTestRecord {
   reintentoUnidadId?: string;
 }
 
-// CU09: Entrega de Incentivo y Refrigerio
+// Entrega de Incentivo y Refrigerio
 export interface IncentivoEntregaRecord {
   idEntrega: string;
   idDonacion: number;
@@ -513,7 +514,7 @@ export interface IncentivoEntregaRecord {
   responsableEntrega: string;
 }
 
-// CU21: Donación Autóloga Programada para Cirugías Electivas
+// Donación Autóloga Programada para Cirugías Electivas
 export interface AutologousProgramRecord {
   idPrograma: string;
   idDonante?: number;

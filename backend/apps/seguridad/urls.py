@@ -1,9 +1,11 @@
 """
-Rutas URL para la app de Seguridad (CU01, CU02, CU03).
+Rutas URL para la app de Seguridad, Autenticación y Auditoría.
 """
 from django.urls import path
 from .views import (
     LoginView,
+    AutenticarUsuarioView,
+    DesbloquearUsuarioAdminView,
     AutoRegistroPosibleDonadorView,
     CrearPersonalSaludView,
     PersonalSaludListView,
@@ -15,8 +17,13 @@ from .views import (
 )
 
 urlpatterns = [
-    # Autenticar Usuario e Iniciar Sesión (Selector de Perfiles)
-    path('auth/login/', LoginView.as_view(), name='auth_login'),
+    # Autenticar Usuario e Iniciar Sesión (Bloqueo progresivo y multi-rol)
+    path('auth/login/', AutenticarUsuarioView.as_view(), name='auth_login'),
+    path('auth/autenticar/', AutenticarUsuarioView.as_view(), name='auth_autenticar'),
+
+    # Rehabilitación manual de cuentas bloqueadas por el Administrador
+    path('usuarios/<int:idusuario_objetivo>/desbloquear/', DesbloquearUsuarioAdminView.as_view(), name='usuario_desbloquear_admin'),
+    path('usuarios/desbloquear/<int:idusuario_objetivo>/', DesbloquearUsuarioAdminView.as_view(), name='usuario_desbloquear_admin_alt'),
 
     # Procedimiento 1: Auto-Registro Público de Posible Donador (Sin Admin)
     path('auth/autoregistro/', AutoRegistroPosibleDonadorView.as_view(), name='auth_autoregistro'),

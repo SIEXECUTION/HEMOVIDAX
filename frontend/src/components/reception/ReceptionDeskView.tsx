@@ -86,7 +86,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<ReceptionTab>('viabilidad');
 
-  // CU21: Autologous programs state
+  // Donación Autóloga state
   const [internalAutologousPrograms, setInternalAutologousPrograms] = useState<AutologousProgramRecord[]>(MOCK_AUTOLOGOUS_PROGRAMS);
   const activeAutologousPrograms = autologousPrograms || internalAutologousPrograms;
   const setActiveAutologousPrograms = setAutologousPrograms || setInternalAutologousPrograms;
@@ -142,7 +142,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
     setReplacements(updatedReplacements);
     setInventory(prev => [...newInventoryItems, ...prev]);
 
-    // Automatically register post-extraction incentive (CU09)
+    // Automatically register post-extraction incentive
     const newIncentivo: IncentivoEntregaRecord = {
       idEntrega: `INC-${Date.now()}`,
       idDonacion: newDonation.idExtraccion,
@@ -162,7 +162,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
     setIncentivosEntrega(prev => [newIncentivo, ...prev]);
   };
 
-  // CU08: Confirm physical attendance of postulant at desk
+  // Confirm physical attendance of postulant at desk
   const handleConfirmAttendance = (idCita: number) => {
     const app = appointments.find(a => a.idCita === idCita);
     if (!app) return;
@@ -267,10 +267,10 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
           <div 
             onClick={() => setActiveTab('autologas')}
             className="cursor-pointer hover:bg-white/10 p-1.5 rounded-xl transition-all border border-purple-500/30 bg-purple-950/40"
-            title="Ir a gestión de Donación Autóloga (CU21)"
+            title="Ir a gestión de Donación Autóloga"
           >
             <span className="text-purple-300 text-[11px] block font-bold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Autóloga (CU21):
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Autóloga:
             </span>
             <strong className="text-lg font-mono font-bold text-purple-200">
               {autologousCount} pacientes &rarr;
@@ -315,7 +315,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
           }`}
         >
           <Sparkles className="w-4 h-4 text-purple-500" />
-          <span>Donación Autóloga (CU21)</span>
+          <span>Donación Autóloga</span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
             activeTab === 'autologas' ? 'bg-purple-900 text-purple-100' : 'bg-purple-200 text-purple-800 font-bold'
           }`}>
@@ -388,7 +388,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
         />
       )}
 
-      {/* TAB 2: CONFIRMACIÓN DE ASISTENCIA FÍSICA & TURNOS MÉDICOS (CU08) */}
+      {/* TAB 2: CONFIRMACIÓN DE ASISTENCIA FÍSICA & TURNOS MÉDICOS */}
       {activeTab === 'asistencia' && (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -526,7 +526,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
         />
       )}
 
-      {/* TAB CU21: DONACIÓN AUTÓLOGA PROGRAMADA */}
+      {/* TAB: DONACIÓN AUTÓLOGA PROGRAMADA */}
       {activeTab === 'autologas' && (
         <AutologousDonationSection
           programs={activeAutologousPrograms}

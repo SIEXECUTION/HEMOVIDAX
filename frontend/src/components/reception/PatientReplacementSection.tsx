@@ -239,7 +239,7 @@ export const PatientReplacementSection: React.FC<PatientReplacementSectionProps>
                         )}
                       </div>
 
-                      {/* Tutor Responsable Info (CU20) */}
+                      {/* Tutor Responsable Info */}
                       {item.tutorResponsable && (
                         <div className="mt-2 p-2.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-[11px] text-blue-950 flex flex-wrap items-center gap-3">
                           <span className="font-bold flex items-center gap-1 text-blue-800">
@@ -251,7 +251,7 @@ export const PatientReplacementSection: React.FC<PatientReplacementSectionProps>
                         </div>
                       )}
 
-                      {/* Scarce Group Substitution Authorization (CU20) */}
+                      {/* Scarce Group Substitution Authorization */}
                       {item.sustitucionAutorizada && (
                         <div className="mt-2 p-2.5 bg-teal-50 border border-teal-200 rounded-xl text-[11px] text-teal-950 flex flex-wrap items-center gap-2">
                           <span className="font-bold text-teal-800 flex items-center gap-1">

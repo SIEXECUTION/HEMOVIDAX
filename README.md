@@ -1,7 +1,7 @@
 # 🩸 HemoVida - Sistema de Gestión para Banco de Sangre
 
 > Plataforma modular integral para la gestión de donantes, hemocomponentes, auditoría forense y trazabilidad transfusional.
-> Desarrollado con **Python 3.12**, **Django 5**, **Django REST Framework (DRF)**, **PostgreSQL 18** y **React 19 + Vite**.
+> Desarrollado con **Python 3.12**, **Django 5**, **Django REST Framework (DRF)**, **PostgreSQL (Supabase)** y **React 19 + Vite + Tailwind CSS**.
 
 ---
 
@@ -11,97 +11,87 @@
 HemoVida-Banco-De-Sangre/
 ├── backend/                  # API REST modular en Django 5 + DRF
 │   ├── apps/
-│   │   ├── seguridad/        # CU01, CU02, CU03: Auth JWT, Roles RBAC, Auditoría Forense
-│   │   ├── donantes/         # CU05: Donantes, Carnet Digital, Cálculo Biológico
-│   │   └── inventario/       # CU04: Parámetros de Stock, Hemocomponentes, Alertas Críticas
+│   │   ├── seguridad/        # Autenticación JWT, Roles RBAC y Auditoría Forense
+│   │   ├── donantes/         # Donantes, Carnet Digital y Cálculo Biológico de Intervalos
+│   │   └── inventario/       # Parámetros de Stock, Hemocomponentes, Categoría Etaria y FEFO
 │   ├── hemovida_project/     # Configuración central (Settings, URLs, WSGI)
+│   ├── build.sh              # Script de compilación para Render
+│   ├── Procfile              # Comando de inicio Gunicorn para Render
 │   ├── manage.py
 │   ├── requirements.txt
 │   └── .env.example
-├── frontend/                 # Aplicación Web React 19 + Tailwind CSS + Vite
-│   ├── src/                  # Componentes (DigitalCardModal, LoginModal, etc.)
+├── frontend/                 # Aplicación Web React 19 + Vite + Tailwind CSS
+│   ├── src/                  # Componentes, vistas por rol, servicios y tipos
 │   ├── package.json
-│   └── vite.config.ts        # Configurado con Proxy hacia el backend (:8000)
-├── database/                 # Scripts SQL para PostgreSQL 18
-│   ├── 00_hemovida_master.sql # Script maestro: Tablas + Triggers + SP + Inserts
-│   ├── 01_tablas_e_indices.sql
-│   ├── 02_triggers.sql
-│   ├── 03_procedimientos_almacenados.sql
-│   └── 04_datos_iniciales.sql
-├── iniciar_backend.bat       # Lanzador rápido en 1 clic para Windows
-├── iniciar_frontend.bat      # Lanzador rápido en 1 clic para Windows
+│   └── vite.config.ts        # Configurado con Proxy hacia el backend
+├── render.yaml               # Manifiesto de despliegue para Render (Backend)
+├── iniciar_backend.bat       # Lanzador rápido en 1 clic para desarrollo local
+├── iniciar_frontend.bat      # Lanzador rápido en 1 clic para desarrollo local
 └── README.md
 ```
 
 ---
 
-## 📋 Implementación de los 5 Casos de Uso (CU01 - CU05)
+## 📋 Módulos Principales de la Plataforma
 
-### [CU01] Autenticar Usuario e Iniciar Sesión
-- **Endpoint:** `POST /api/auth/login/`
-- **Permisos:** Público (`AllowAny`)
-- **Lógica de Negocio:**
-  - Valida credenciales contra `Usuario` (soporta hashes `argon2id`, `pbkdf2` y texto plano validado).
-  - Bloquea cuentas cuyo `estado` sea diferente de `'Activo'`.
-  - Emite tokens JWT (`access` de 60 min y `refresh` de 24 hrs) con claims institucionales.
-  - Registra automáticamente el acceso exitoso en `BitacoraAuditoria` con la IP real del cliente.
+### 1. Seguridad, Control de Acceso y RBAC
+- **Autenticación Segura:** Endpoint `POST /api/auth/login/` con emisión de tokens JWT (`access` y `refresh`) y validación de contraseñas robustas (soporte Argon2id y PBKDF2).
+- **Gestión de Personal y Cuentas:** Registro y administración de personal de salud con asignación de roles institucionales (Administrador, Médico de Triaje, Bioquímico de Laboratorio, Personal de Recepción/Colecta, Técnico de Logística/Despacho).
+- **Protección contra Fuerza Bruta:** Bloqueo automático de cuentas tras intentos fallidos repetidos con trazabilidad de bloqueos recibidos.
 
-### [CU02] Gestionar Cuentas de Personal y Roles RBAC
-- **Endpoints:**
-  - `POST /api/usuarios/registrar/`: Creación de cuenta protegida por rol Administrador. Aplica `SecurePasswordValidator` antes de persistir y audita el alta.
-  - `GET /api/personal/`: **Consulta C4 / Consulta 6:** Matriz de usuarios del personal con cargo, rol institucional y registro profesional.
-  - `PATCH /api/usuarios/{id}/estado/`: Cambio de estado (`Activo`, `Inactivo`, `Bloqueado`) auditado en bitácora.
+### 2. Auditoría Forense y Trazabilidad Transfusional
+- **Bitácora Forense:** Registro inmutable de eventos clínicos, de inventario y de acceso con captura de IP origen, usuario actor, rol activo (`X-Active-Role`), tabla afectada y timestamp de precisión.
+- **Filtros Avanzados:** Búsqueda por rango de fechas, usuario actor, entidad y detección de operaciones fuera de horario laboral habitual.
 
-### [CU03] Consultar y Auditar Bitácora de Eventos Forenses
-- **Endpoint:** `GET /api/auditoria/`
-- **Filtros:** `?fecha_inicio=YYYY-MM-DD`, `?fecha_fin=YYYY-MM-DD`, `?id_usuario=INT`, `?tabla_afectada=STR`.
-- **Filtro Forense Especial:** `?fuera_turno=true`
-  - Ejecuta la **Subconsulta B2 / Consulta 8**: Extrae transacciones ejecutadas entre las 19:00 y las 07:00 por personal de laboratorio (`Bioquímico Serólogo`, `Técnico de Fraccionamiento y Almacén`).
+### 3. Donantes y Carnet Digital Biológico
+- **Evaluación y Carnet Digital:** Endpoint `GET /api/donantes/{ci}/carnet/` con cálculo de intervalo biológico reglamentario:
+  - Donantes Varones: Intervalo biológico de 90 días entre donaciones efectivas.
+  - Donantes Mujeres: Intervalo biológico de 120 días entre donaciones efectivas.
+- **Historial y Trazabilidad:** Cálculo en tiempo real de días restantes de espera, volumen acumulado y condición de aptitud.
 
-### [CU04] Parametrizar Umbrales de Stock Mínimo y Alertas Críticas
-- **Endpoints:**
-  - `GET /api/stock/parametros/`: Listado de umbrales por componente y grupo sanguíneo ABO/Rh.
-  - `PUT /api/stock/parametros/{id}/`: Actualización de umbrales con validación `stockCriticoAlerta <= stockMinimoSeguridad` y auditoría en bitácora.
-  - `GET /api/stock/alertas/`: **Subconsulta B4 / Consulta 20:** Compara las bolsas en estado `'Disponible'` en `EjemplarBolsa` frente a `ParametroStockMinimo` y clasifica en `DEFICIT CRITICO` o `DEFICIT SEGURIDAD`.
+### 4. Control de Inventario y Hemocomponentes (FEFO)
+- **Hemocomponentes Oficiales:** Gestión normalizada de `Concentrado de Globulos Rojos`, `Plasma Fresco Congelado`, `Concentrado Plaquetario` y `Crioprecipitado`.
+- **Categorización Etaria:** Segmentación clínica obligatoria en `Adulto`, `Adolescente` y `Pediátrico`.
+- **Despacho FEFO (First-Expired, First-Out):** Priorización algorítmica de unidades con fecha de caducidad más próxima para minimizar mermas.
+- **Umbrales y Alertas Críticas:** Parámetros configurables de stock mínimo de seguridad y alerta crítica con cálculo dinámico de déficit.
 
-### [CU05] Consultar Carnet Digital e Historial Biológico del Donante
-- **Endpoint:** `GET /api/donantes/{ci}/carnet/`
-- **Lógica Biológica (Consulta C1):**
-  - Donantes Varones (`M`): Intervalo biológico de 90 días (`fechaHabilitacionProxima = fechaUltimaDonacion + 90 días`).
-  - Donantes Mujeres (`F`): Intervalo biológico de 120 días (`fechaHabilitacionProxima = fechaUltimaDonacion + 120 días`).
-  - Calcula `diasRestantesEspera = max(0, fechaHabilitacionProxima - hoy)`.
-  - Habilitación: `(estadoHabilitacion == 'Apto') and (diasRestantesEspera == 0)`.
-- **Acumulados Históricos (Consulta C3):** Suma total de donaciones y volumen en ml para el modal `DigitalCardModal`.
+### 5. Donación Autóloga y Gestión Transfusional
+- **Protocolo de Donación Autóloga:** Registro, flebotomía y custodia exclusiva en frío de unidades destinadas a procedimientos quirúrgicos electivos programados.
+- **Bloqueo a Terceros:** Marcado `esExclusivoAutologo = TRUE` para prevenir despachos cruzados y protocolo de descarte biológico controlado ante cancelación quirúrgica.
 
 ---
 
-## 🚀 Guía Rápida de Despliegue en Local (Presentación / Exposición)
+## 🚀 Despliegue en Producción
 
-### Opción 1: Inicio Rápido en Windows (1 Clic)
-1. Haz doble clic en **`iniciar_backend.bat`** (iniciará el servidor en `http://127.0.0.1:8000`).
-2. Haz doble clic en **`iniciar_frontend.bat`** (iniciará la interfaz web en `http://localhost:3000`).
+### Backend en Render
+1. Conecta el repositorio de GitHub en el panel de **Render**.
+2. Selecciona **Web Service** y especifica:
+   - **Root Directory:** `backend`
+   - **Build Command:** `bash build.sh`
+   - **Start Command:** `gunicorn hemovida_project.wsgi:application --bind 0.0.0.0:$PORT --workers 2`
+3. Configura las variables de entorno en Render:
+   - `DATABASE_URL`: URI de conexión PostgreSQL provista por **Supabase** (modo Transaction / Session Pooler con SSL).
+   - `DEBUG`: `False`
+   - `ALLOWED_HOSTS`: `*` (o tu dominio asignado en Render)
+   - `SECRET_KEY`: Cadena aleatoria segura para producción.
+   - `CORS_ALLOW_ALL_ORIGINS`: `True`
+
+### Frontend en Cloudflare Pages
+1. Conecta el repositorio de GitHub en **Cloudflare Pages**.
+2. Selecciona **Create application** > **Pages** > **Connect to Git**.
+3. Configura los parámetros de compilación:
+   - **Root directory:** `frontend`
+   - **Framework preset:** `Vite`
+   - **Build command:** `npm run build`
+   - **Build output directory:** `dist`
+4. Configura la variable de entorno para conectar con el backend de Render:
+   - `VITE_API_URL`: `https://tu-servicio-render.onrender.com`
 
 ---
 
-### Opción 2: Ejecución Manual Paso a Paso
+## 💻 Ejecución en Desarrollo Local
 
-#### 1. Configuración de la Base de Datos
-- **PostgreSQL 18:**
-  1. En pgAdmin o `psql`, crea la base de datos `Hemovida`.
-  2. Ejecuta el archivo maestro [`database/00_hemovida_master.sql`](database/00_hemovida_master.sql).
-  3. En `backend/.env`, configura tus credenciales:
-     ```ini
-     USE_SQLITE=False
-     DB_NAME=Hemovida
-     DB_USER=postgres
-     DB_PASSWORD=tu_password
-     DB_HOST=localhost
-     DB_PORT=5432
-     ```
-- **Modo Demostración Rápido (SQLite sin Postgres):**
-  - Si vas a exponer en una máquina sin PostgreSQL instalado, simplemente pon `USE_SQLITE=True` en `backend/.env` y ejecuta `python apps/seed_data.py`.
-
-#### 2. Iniciar el Backend
+### 1. Iniciar Backend
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -109,32 +99,21 @@ python manage.py runserver 8000
 ```
 API activa en: **`http://127.0.0.1:8000`**
 
-#### 3. Iniciar el Frontend
+### 2. Iniciar Frontend
 ```bash
 cd frontend
-npm install --legacy-peer-deps
+npm install
 npm run dev
 ```
 Aplicación web activa en: **`http://localhost:3000`**
 
 ---
 
-## 🔑 Credenciales Institucionales de Prueba
+## 🧪 Pruebas Automatizadas
 
-| Rol | Usuario | Contraseña | Perfil Demostrativo |
-| :--- | :--- | :--- | :--- |
-| **Administrador del Sistema** | `admin.ezabala` | `HemoVida#2026!` | Acceso completo a Auditoría Forense y Stock. |
-| **Donante (Carnet Digital)** | `carlos.pimentel` | `Pimentel$Dev12` | C.I. `7894561 SC` (Carnet `HV-DON-2024-0491`). |
-| **Bioquímico Serólogo** | `serologia.cristhian` | `Cristhian$Vero88` | Pruebas de laboratorio y marcadores virales. |
-| **Médico de Triaje** | `triaje.trinidad` | `Doctora!Triaje99` | Evaluación de aptitud física y signos vitales. |
-| **Secretaría / Admisión** | `recepcion.patricia` | `Patricia@Pass123` | Recepción de postulantes y citas. |
-
----
-
-## 🧪 Pruebas Unitarias Automatizadas
-Para verificar la integridad de todos los endpoints y reglas de negocio:
+El proyecto cuenta con una suite completa de pruebas unitarias y de integración que validan validadores, endpoints y lógica transaccional:
 ```bash
 cd backend
-python manage.py test
+python manage.py test apps
 ```
-**Resultado:** **18/18 pruebas superadas (OK, 0 errores, 0 fallos)** cubriendo validadores regex de contraseña, reglas biológicas de donación por sexo y reportes de stock.
+**Resultado:** Todas las pruebas superadas exitosamente (`OK`).

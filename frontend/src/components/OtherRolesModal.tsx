@@ -84,7 +84,7 @@ const HEALTH_ROLES: AvailableHealthRole[] = [
     responsibilities: [
       'Registro oficial de nuevos postulantes y verificación de C.I.',
       'Control de flujo de atención y recepción en salas de colecta',
-      'Gestión de Donación Autóloga Programada (CU21) para cirugías electivas',
+      'Gestión de Donación Autóloga Programada para cirugías electivas',
       'Gestión y entrega de refrigerios e incentivos solidarios'
     ]
   },

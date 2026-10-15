@@ -34,6 +34,36 @@ export interface LoginResponse {
   detail?: string;
 }
 
+/**
+ * Obtiene cabeceras HTTP estándar incluyendo Authorization y X-Active-Role para auditoría forense.
+ */
+function getAuthAndRoleHeaders(extraHeaders: Record<string, string> = {}, explicitToken?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    ...extraHeaders
+  };
+
+  const token = explicitToken || localStorage.getItem('hemovida_jwt_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  try {
+    const rawSession = localStorage.getItem('hemovida_session');
+    if (rawSession) {
+      const sess = JSON.parse(rawSession);
+      const activeRole = sess?.activeRole || sess?.role;
+      if (activeRole) {
+        headers['X-Active-Role'] = String(activeRole);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return headers;
+}
+
 export const apiService = {
   /**
    * Health Check de conexión
@@ -42,7 +72,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/health/`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: getAuthAndRoleHeaders()
       });
       return await res.json();
     } catch (e) {
@@ -57,10 +87,7 @@ export const apiService = {
   async login(usernameOrEmail: string, password: string): Promise<LoginResponse> {
     const res = await fetch(`${API_BASE_URL}/auth/login/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         username: usernameOrEmail.trim(),
         password: password
@@ -83,10 +110,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/recuperar-password/solicitar/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email: cleanEmail })
       });
       if (res.ok) {
@@ -98,7 +122,6 @@ export const apiService = {
       if (e?.message && !e.message.includes('fetch')) {
         throw e;
       }
-      // Si el backend estuviera momentáneamente inaccesible, informar al usuario claramente
       throw new Error('No se pudo conectar con el servidor de correos HemoVida. Por favor intente nuevamente en unos instantes.');
     }
   },
@@ -112,10 +135,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/recuperar-password/confirmar/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           email: cleanEmail,
           token: cleanToken,
@@ -148,10 +168,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/cambiar-password/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           email: cleanEmail,
           current_password: currentPassword || '',
@@ -177,10 +194,7 @@ export const apiService = {
    */
   async getStockAlertas(token?: string) {
     try {
-      const headers: Record<string, string> = { 'Accept': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      const headers = getAuthAndRoleHeaders({}, token);
       const res = await fetch(`${API_BASE_URL}/stock/alertas/`, { headers });
       if (res.ok) {
         return await res.json();
@@ -211,11 +225,7 @@ export const apiService = {
     if (filters?.id_usuario) params.append('id_usuario', String(filters.id_usuario));
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    const headers: Record<string, string> = { 'Accept': 'application/json' };
-    const savedToken = token || localStorage.getItem('hemovida_jwt_token');
-    if (savedToken) {
-      headers['Authorization'] = `Bearer ${savedToken}`;
-    }
+    const headers = getAuthAndRoleHeaders({}, token);
 
     const res = await fetch(`${API_BASE_URL}/auditoria/${queryString}`, {
       method: 'GET',
@@ -240,15 +250,7 @@ export const apiService = {
     rolActivo?: string;
   }): Promise<any> {
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      const savedToken = localStorage.getItem('hemovida_jwt_token');
-      if (savedToken) {
-        headers['Authorization'] = `Bearer ${savedToken}`;
-      }
-
+      const headers = getAuthAndRoleHeaders({ 'Content-Type': 'application/json' });
       const res = await fetch(`${API_BASE_URL}/auditoria/`, {
         method: 'POST',
         headers,
@@ -264,7 +266,7 @@ export const apiService = {
   },
 
   /**
-   * Procedimiento 1: Auto-Registro Público de Posible Donador (Sin Admin)
+   * Procedimiento: Auto-Registro Público de Posible Donador (Sin Admin)
    */
   async autoRegistroPosibleDonador(data: {
     ci: string;
@@ -282,10 +284,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/autoregistro/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data)
       });
       const resData = await res.json();
@@ -303,7 +302,7 @@ export const apiService = {
   },
 
   /**
-   * Procedimiento 2: Alta de Personal de Salud (Solo Ejecutable por Administrador)
+   * Procedimiento: Alta de Personal de Salud (Solo Ejecutable por Administrador)
    */
   async crearPersonalSalud(token: string, data: {
     ci: string;
@@ -322,11 +321,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/personal/crear/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }, token),
         body: JSON.stringify(data)
       });
       const resData = await res.json();
@@ -350,7 +345,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE_URL}/donantes/${encodeURIComponent(ciOrCode.trim())}/carnet/`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' }
+        headers: getAuthAndRoleHeaders()
       });
       if (res.ok) {
         return await res.json();
@@ -369,17 +364,10 @@ export const apiService = {
   },
 
   /**
-   * CU02: Actualizar estado de usuario (Desbloquear / Activar / Inactivar)
+   * Actualizar estado de usuario (Desbloquear / Activar / Inactivar)
    */
   async updateUsuarioEstado(idUsuario: number, estado: 'Activo' | 'Inactivo' | 'Bloqueado', token?: string): Promise<any> {
-    const savedToken = token || localStorage.getItem('hemovida_jwt_token');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    };
-    if (savedToken) {
-      headers['Authorization'] = `Bearer ${savedToken}`;
-    }
+    const headers = getAuthAndRoleHeaders({ 'Content-Type': 'application/json' }, token);
     const res = await fetch(`${API_BASE_URL}/usuarios/${idUsuario}/estado/`, {
       method: 'PUT',
       headers,
@@ -390,7 +378,80 @@ export const apiService = {
       throw new Error(resData.detail || 'Error al actualizar el estado del usuario.');
     }
     return resData;
+  },
+
+  /**
+   * Orquestación DRF: Agendar Cita de Donación (@transaction.atomic)
+   */
+  async agendarCitaDonacion(data: {
+    idposibledonador: number;
+    fechahoraprogramada: string;
+    prefiltroaprobado?: boolean;
+    requisitos?: Array<{ idrequisito: number; cumplerequisito: boolean; observacion?: string }>;
+  }): Promise<any> {
+    const headers = getAuthAndRoleHeaders({ 'Content-Type': 'application/json' });
+    const res = await fetch(`${API_BASE_URL}/donantes/citas/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    const resData = await res.json();
+    if (!res.ok) {
+      throw new Error(resData.detail || 'Error al agendar la cita de donación.');
+    }
+    return resData;
+  },
+
+  /**
+   * Orquestación DRF: Procesar Triaje Clínico (@transaction.atomic)
+   */
+  async procesarTriajeClinico(data: {
+    idposibledonador: number;
+    idpersonalsalud: number;
+    pesokg: number;
+    presionsistolica: number;
+    presiondiastolica: number;
+    hemoglobina: number;
+    temperatura: number;
+    motivodiferimiento?: string | null;
+    diasinhabilitacion?: number;
+  }): Promise<any> {
+    const headers = getAuthAndRoleHeaders({ 'Content-Type': 'application/json' });
+    const res = await fetch(`${API_BASE_URL}/donantes/triaje/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    const resData = await res.json();
+    if (!res.ok) {
+      throw new Error(resData.detail || 'Error al procesar el triaje clínico.');
+    }
+    return resData;
+  },
+
+  /**
+   * Orquestación DRF: Registrar Flebotomía y Fraccionamiento (@transaction.atomic)
+   */
+  async registrarFlebotomiaFraccionamiento(data: {
+    idpersonadonante: number;
+    idpersonalsalud: number;
+    idtriaje: number;
+    idgrupo: number;
+    idubicacioncamara?: number;
+    brazo?: string;
+    volumenml?: number;
+    categoriaetaria?: 'Adulto' | 'Adolescente' | 'Pediátrico';
+  }): Promise<any> {
+    const headers = getAuthAndRoleHeaders({ 'Content-Type': 'application/json' });
+    const res = await fetch(`${API_BASE_URL}/donantes/flebotomia/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    const resData = await res.json();
+    if (!res.ok) {
+      throw new Error(resData.detail || 'Error al registrar la flebotomía y fraccionamiento.');
+    }
+    return resData;
   }
 };
-
-

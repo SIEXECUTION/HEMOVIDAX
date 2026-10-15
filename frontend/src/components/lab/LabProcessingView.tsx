@@ -413,7 +413,7 @@ export const LabProcessingView: React.FC<LabProcessingViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2: LABORATORIO PARALELO & BARRERA DE LIBERACIÓN (CU13/14) */}
+      {/* TAB 2: LABORATORIO PARALELO & BARRERA DE LIBERACIÓN */}
       {activeTab === 'serologia' && (
         <form onSubmit={handleReleaseBarrierSubmit} className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -643,7 +643,7 @@ export const LabProcessingView: React.FC<LabProcessingViewProps> = ({
         </form>
       )}
 
-      {/* TAB 3: REGISTRO DE BAJAS Y DESCARTES (CU14) */}
+      {/* TAB 3: REGISTRO DE BAJAS Y DESCARTES */}
       {activeTab === 'bajas' && (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

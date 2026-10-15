@@ -69,7 +69,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
   replacements,
   onConfirmDispatch
 }) => {
-  // Priority: Ordinaria, Urgente, or Código Rojo (CU17)
+  // Priority: Ordinaria, Urgente, or Código Rojo
   const [prioridad, setPrioridad] = useState<'Ordinaria' | 'Urgente' | 'Código Rojo'>('Ordinaria');
 
   // Available items in inventory (only 'Disponible')
@@ -103,20 +103,20 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
   // Selected inventory bags to dispatch
   const [selectedBagIds, setSelectedBagIds] = useState<string[]>([]);
 
-  // Código Rojo: Acta de extrema urgencia (CU17)
+  // Código Rojo: Acta de extrema urgencia
   const [actaOmisionJustificada, setActaOmisionJustificada] = useState(true);
   const [actaFirmaConfirmada, setActaFirmaConfirmada] = useState(true);
 
-  // CU18: Crossmatching / Pruebas Cruzadas In Vitro simulator
+  // Crossmatching / Pruebas Cruzadas In Vitro simulator
   const [crossmatchResults, setCrossmatchResults] = useState<Record<string, 'Compatible' | 'Incompatible'>>({});
   const [crossmatchAudits, setCrossmatchAudits] = useState<CompatibilityTestRecord[]>([]);
 
-  // Cobro del servicio (CU19: Cobro de aranceles de procesamiento - NUNCA venta de sangre)
+  // Cobro del servicio: Cobro de aranceles de procesamiento - NUNCA venta de sangre
   const [estadoPago, setEstadoPago] = useState<'Pagado' | 'Exonerado SUS' | 'Convenio Institucional' | 'Pendiente'>('Pagado');
   const [metodoPago, setMetodoPago] = useState<'Efectivo' | 'QR / Transferencia' | 'Tarjeta de Débito' | 'SUS / Gratuito Ley 475'>('QR / Transferencia');
   const [numeroRecibo, setNumeroRecibo] = useState(`ARANCEL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
 
-  // Cadena de frío (CU19)
+  // Cadena de frío
   const [tempSalida, setTempSalida] = useState<number>(3.8);
   const [tempLlegada, setTempLlegada] = useState<number>(4.2);
 
@@ -142,7 +142,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
 
   const selectedUnits = availableItems.filter(item => selectedBagIds.includes(item.id));
 
-  // Handle in vitro crossmatching test for a unit (CU18)
+  // Handle in vitro crossmatching test for a unit
   const handleTestCompatibility = (bagId: string, simulateIncompatible: boolean) => {
     const bag = availableItems.find(i => i.id === bagId);
     if (!bag) return;
@@ -289,7 +289,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
       return item;
     });
 
-    // Update patient replacement record (CU20: strict 1 to 1 equivalence)
+    // Update patient replacement record: strict 1 to 1 equivalence
     const existingReplacementIndex = replacements.findIndex(
       r => r.pacienteCi.trim().toLowerCase() === pacienteCi.trim().toLowerCase()
     );
@@ -327,7 +327,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
         hospital: finalHospital || 'Hospital General',
         fechaSolicitudInicial: new Date().toISOString().split('T')[0],
         unidadesRecibidas: unitsCount,
-        donantesRequeridos: unitsCount, // strict 1 to 1 (CU20)
+        donantesRequeridos: unitsCount, // strict 1 to 1
         grupoReceptor: `${pacienteGrupo}${pacienteRh === 'Positivo' ? '+' : '-'}`,
         donantesRepuestos: [],
         estado: 'Pendiente',
@@ -714,7 +714,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
                 </div>
               </div>
 
-              {/* SECTION 4: ACTA DE EXTREMA URGENCIA SI ES CÓDIGO ROJO (CU17) */}
+              {/* SECTION 4: ACTA DE EXTREMA URGENCIA SI ES CÓDIGO ROJO */}
               {isCodigoRojo && (
                 <div className="p-4 bg-red-950 text-white rounded-2xl space-y-3 text-xs border border-red-800">
                   <div className="flex items-center gap-2 font-bold text-sm text-red-200">

@@ -1124,10 +1124,10 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
 export const MOCK_PATIENT_REPLACEMENTS = MOCK_REPLACEMENTS;
 
 // ==========================================
-// MOCK DATA PARA LOS 20 CASOS DE USO
+// MOCK DATA DEL SISTEMA HEMOVIDA
 // ==========================================
 
-// CU03: Bitácora de Auditoría Forense
+// Bitácora de Auditoría Forense
 export const MOCK_BITACORA: BitacoraAuditoria[] = [
   {
     idEvento: 'EVT-2026-901',
@@ -1225,7 +1225,7 @@ export const MOCK_BITACORA: BitacoraAuditoria[] = [
   }
 ];
 
-// CU04: Parametrización de Umbrales de Stock de Seguridad
+// Parametrización de Umbrales de Stock de Seguridad
 export const MOCK_STOCK_THRESHOLDS: StockThresholdConfig[] = [
   { grupo: 'O', factorRh: 'Negativo', stockMinimoSeguridad: 6, stockAlertaCritica: 3, diasCaducidadAlerta: 7 },
   { grupo: 'O', factorRh: 'Positivo', stockMinimoSeguridad: 12, stockAlertaCritica: 5, diasCaducidadAlerta: 5 },
@@ -1237,7 +1237,7 @@ export const MOCK_STOCK_THRESHOLDS: StockThresholdConfig[] = [
   { grupo: 'AB', factorRh: 'Positivo', stockMinimoSeguridad: 3, stockAlertaCritica: 1, diasCaducidadAlerta: 5 }
 ];
 
-// CU10 / CU11: Triajes Clínicos
+// Triajes Clínicos
 export const MOCK_CLINICAL_TRIAJES: ClinicalTriageRecord[] = [
   {
     idTriaje: 'TRJ-2026-101',
@@ -1284,7 +1284,7 @@ export const MOCK_CLINICAL_TRIAJES: ClinicalTriageRecord[] = [
   }
 ];
 
-// CU13 / CU14: Análisis de Laboratorio en Paralelo
+// Análisis de Laboratorio en Paralelo
 export const MOCK_LAB_ANALYSES: LaboratoryAnalysisRecord[] = [
   {
     idAnalisis: 'LAB-2026-441',
@@ -1346,7 +1346,7 @@ export const MOCK_LAB_ANALYSES: LaboratoryAnalysisRecord[] = [
   }
 ];
 
-// CU14: Bajas e Incineración por Descarte
+// Bajas e Incineración por Descarte
 export const MOCK_BAJAS_INVENTARIO: BajaInventarioRecord[] = [
   {
     idBaja: 'BAJA-2026-081',
@@ -1362,7 +1362,7 @@ export const MOCK_BAJAS_INVENTARIO: BajaInventarioRecord[] = [
   }
 ];
 
-// CU16: Solicitudes Pretransfusionales para Cirugía Electiva (48-72h antes)
+// Solicitudes Pretransfusionales para Cirugía Electiva (48-72h antes)
 export const MOCK_PRETRANSFUSION_ORDERS: PretransfusionOrder[] = [
   {
     idSolicitud: 'PRE-2026-301',
@@ -1399,7 +1399,7 @@ export const MOCK_PRETRANSFUSION_ORDERS: PretransfusionOrder[] = [
   }
 ];
 
-// CU18: Pruebas Cruzadas de Compatibilidad in vitro
+// Pruebas Cruzadas de Compatibilidad in vitro
 export const MOCK_COMPATIBILITY_TESTS: CompatibilityTestRecord[] = [
   {
     idPrueba: 'CRX-2026-501',
@@ -1442,7 +1442,7 @@ export const MOCK_COMPATIBILITY_TESTS: CompatibilityTestRecord[] = [
   }
 ];
 
-// CU17: Actas de Extrema Urgencia Código Rojo
+// Actas de Extrema Urgencia Código Rojo
 export const MOCK_EMERGENCY_ACTS: EmergencyActRecord[] = [
   {
     idActa: 'ACT-URG-0926',
@@ -1461,7 +1461,7 @@ export const MOCK_EMERGENCY_ACTS: EmergencyActRecord[] = [
   }
 ];
 
-// CU09: Registro de Entrega de Incentivos post-extracción
+// Registro de Entrega de Incentivos post-extracción
 export const MOCK_INCENTIVOS_ENTREGA: IncentivoEntregaRecord[] = [
   {
     idEntrega: 'INC-2026-101',
@@ -1478,7 +1478,7 @@ export const MOCK_INCENTIVOS_ENTREGA: IncentivoEntregaRecord[] = [
   }
 ];
 
-// CU21: Programas de Donación Autóloga Programada (Cirugías Electivas)
+// Programas de Donación Autóloga Programada (Cirugías Electivas)
 export const MOCK_AUTOLOGOUS_PROGRAMS: AutologousProgramRecord[] = [
   {
     idPrograma: 'PROG-AUT-2026-001',
