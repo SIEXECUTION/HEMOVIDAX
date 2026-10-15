@@ -227,10 +227,12 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-# Configuración de CORS para Frontend React (Cloudflare Pages) y orígenes autorizados
-CORS_ALLOW_ALL_ORIGINS = True  # Permite que el frontend en Cloudflare Pages se comunique sin bloqueos
+# Configuración de CORS para Frontend React (Cloudflare Pages/Workers) y orígenes autorizados
+CORS_ALLOW_ALL_ORIGINS = True  # Permite que el frontend en Cloudflare se comunique sin bloqueos
+CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://.*\.pages\.dev$",
+    r"^https?://.*\.workers\.dev$",
     r"^https?://.*\.vercel\.app$",
     r"^https?://.*\.onrender\.com$",
     r"^http://localhost:(3000|5173)$",
