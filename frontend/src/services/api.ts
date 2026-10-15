@@ -3,7 +3,7 @@ import { RolDisponible, RoleCode } from '../types';
 const configuredBase = import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).trim().replace(/\/+$/, '') : '';
 const API_BASE_URL = configuredBase
   ? (configuredBase.endsWith('/api') ? configuredBase : `${configuredBase}/api`)
-  : 'https://hemovidax.onrender.com/api';
+  : '/api';
 
 export interface LoginResponse {
   usuarioId: number;

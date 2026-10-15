@@ -30,7 +30,6 @@ import {
   IncentivoEntregaRecord,
   AutologousProgramRecord
 } from '../../types';
-import { MOCK_AUTOLOGOUS_PROGRAMS } from '../../data/mockData';
 import { BloodInventorySection } from './BloodInventorySection';
 import { DispatchHistorySection } from './DispatchHistorySection';
 import { PatientReplacementSection } from './PatientReplacementSection';
@@ -87,7 +86,7 @@ export const ReceptionDeskView: React.FC<ReceptionDeskViewProps> = ({
   const [activeTab, setActiveTab] = useState<ReceptionTab>('viabilidad');
 
   // Donación Autóloga state
-  const [internalAutologousPrograms, setInternalAutologousPrograms] = useState<AutologousProgramRecord[]>(MOCK_AUTOLOGOUS_PROGRAMS);
+  const [internalAutologousPrograms, setInternalAutologousPrograms] = useState<AutologousProgramRecord[]>([]);
   const activeAutologousPrograms = autologousPrograms || internalAutologousPrograms;
   const setActiveAutologousPrograms = setAutologousPrograms || setInternalAutologousPrograms;
 

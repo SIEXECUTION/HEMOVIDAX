@@ -1,20 +1,10 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# HemoVida - Frontend
 
-# Run and deploy your AI Studio app
+React + Vite para Cloudflare Pages. La configuración completa está en el README de la raíz.
 
-This contains everything you need to run your app locally.
+- Desarrollo: `npm ci` y `npm run dev` (puerto 3000, proxy local a Django en 8000).
+- Verificación de tipos: `npm run lint`.
+- Producción: configurar `VITE_API_URL` con la URL HTTPS de Render y ejecutar `npm run build`.
+- Publicar el directorio `dist` en Cloudflare Pages.
 
-View your app in AI Studio: https://ai.studio/apps/eaf730a9-8c95-4f22-afd0-68681193fd4f
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+No requiere Gemini ni credenciales de Supabase en el navegador.

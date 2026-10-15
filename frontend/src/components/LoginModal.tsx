@@ -332,15 +332,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
 
     // Roles de Personal de Salud
-    const staffRoleMap: Record<RoleCode, StaffRole> = {
+    const staffRoleMap: Partial<Record<RoleCode, StaffRole>> = {
       'ADMIN': 'administrador',
       'DOC_TRIAJE': 'medico',
       'PERS_COLECTA': 'recepcion',
       'BIOQ_INTEGRAL': 'bioquimico',
       'TEC_LOGISTICA': 'despacho',
-      'POSIBLE_DONADOR': 'donante',
-      'DONANTE': 'donante',
-      'RECEPTOR': 'donante',
       'MED_SOLICITANTE': 'medico'
     };
 
@@ -361,7 +358,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       id: `staff-${usuarioId}`,
       rol: targetStaffRole,
       nombre: nombreCompleto,
-      cargo: staffCargoMap[roleCode] || res.usuario?.rol?.nombreRol || 'Personal de Salud',
+      cargo: staffCargoMap[roleCode] || 'Personal de Salud',
       ci: persona?.ci || '0000000',
       email: email,
       turno: 'Turno Mañana (07:00 - 15:00)',
@@ -415,7 +412,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     try {
       const apiRes = await apiService.login(cleanEmail, cleanPwd);
       if (apiRes && (apiRes.token || apiRes.tokens)) {
-        localStorage.setItem('hemovida_jwt_token', apiRes.token || apiRes.tokens?.access);
+        localStorage.setItem('hemovida_jwt_token', apiRes.token || apiRes.tokens?.access || '');
 
         const rolesDisp: RolDisponible[] = apiRes.rolesDisponibles || [];
 
@@ -429,7 +426,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           return;
         } else {
           // Fallback en caso de que no tenga roles parametrizados
-          const legacyRol = (apiRes.usuario?.rol?.codigoRol || apiRes.usuario?.rol?.nombreRol || 'DONANTE').toUpperCase();
+          const legacyRol = 'DONANTE'.toUpperCase();
           const targetCode: RoleCode = (['ADMIN', 'POSIBLE_DONADOR', 'DONANTE', 'DOC_TRIAJE', 'PERS_COLECTA', 'BIOQ_INTEGRAL', 'TEC_LOGISTICA'] as RoleCode[]).includes(legacyRol as any)
             ? (legacyRol as RoleCode)
             : 'DONANTE';
@@ -461,9 +458,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const res = await apiService.requestPasswordReset(recoveryEmail);
       setRecoveryStep(2);
       setRecoveryMsg(res.message);
-      if (res.code) {
-        setRecoveryCodeReceived(res.code);
-      }
       setRecoveryEmailSent(res.email_enviado !== false);
     } catch (err: any) {
       setRecoveryError(err?.message || 'Error al enviar el correo de verificación. Intente nuevamente.');
@@ -569,7 +563,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       // Iniciar sesión inmediatamente con las credenciales registradas
       const loginRes = await apiService.login(cleanEmail, regPassword);
       if (loginRes && (loginRes.token || loginRes.tokens)) {
-        localStorage.setItem('hemovida_jwt_token', loginRes.token || loginRes.tokens.access);
+        localStorage.setItem('hemovida_jwt_token', loginRes.token || loginRes.tokens?.access || '');
         executeSessionLogin('POSIBLE_DONADOR', loginRes, cleanEmail, regPassword);
         return;
       }
@@ -618,7 +612,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    const prefixMap: Record<StaffRole, string> = {
+    const prefixMap: Partial<Record<StaffRole, string>> = {
       medico: 'MED',
       bioquimico: 'BIOQ',
       despacho: 'DESP',

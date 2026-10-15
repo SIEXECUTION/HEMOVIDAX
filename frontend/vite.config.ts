@@ -1,27 +1,36 @@
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import { defineConfig, loadEnv } from "vite";
 
-export default defineConfig(() => {
+export default defineConfig(({ mode, command }) => {
+  const env = loadEnv(mode, process.cwd(), "VITE_");
+  if (
+    command === "build" &&
+    !/^https:\/\/[^\s]+$/.test(env.VITE_API_URL || "")
+  ) {
+    throw new Error(
+      "Configura VITE_API_URL con la URL HTTPS del backend de Render antes de compilar.",
+    );
+  }
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        "@": path.resolve(import.meta.dirname, "."),
       },
     },
     server: {
       port: 3000,
-      host: '0.0.0.0',
+      host: "0.0.0.0",
       proxy: {
-        '/api': {
-          target: 'http://127.0.0.1:8000',
+        "/api": {
+          target: "http://127.0.0.1:8000",
           changeOrigin: true,
         },
       },
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      hmr: process.env.DISABLE_HMR !== "true",
+      watch: process.env.DISABLE_HMR === "true" ? null : {},
     },
   };
 });

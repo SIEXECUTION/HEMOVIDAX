@@ -2,48 +2,12 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      // Prevent "Cannot set property fetch of #<Window> which has only a getter" when external tools/scripts reassign window.fetch
-      (function() {
-        try {
-          var originalFetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : undefined;
-          var currentFetch = originalFetch;
-          if (typeof window !== 'undefined') {
-            Object.defineProperty(window, 'fetch', {
-              get: function() {
-                return currentFetch;
-              },
-              set: function(fn) {
-                currentFetch = fn;
-              },
-              configurable: true,
-              enumerable: true
-            });
-            if (typeof Window !== 'undefined' && Window.prototype && Object.getOwnPropertyDescriptor(Window.prototype, 'fetch')) {
-              try {
-                Object.defineProperty(Window.prototype, 'fetch', {
-                  get: function() {
-                    return currentFetch;
-                  },
-                  set: function(fn) {
-                    currentFetch = fn;
-                  },
-                  configurable: true,
-                  enumerable: true
-                });
-              } catch (e) {}
-            }
-          }
-        } catch (err) {
-          console.warn('Fetch setter safeguard init error:', err);
-        }
-      })();
-    </script>
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HemoVida - Banco de Sangre</title>
-    <meta name="description" content="Banco de Sangre con cuentas de Recepción, Despacho y Donador: inventario de hemocomponentes, despacho con solicitud médica y cobro de servicios, padrón de reposición de pacientes, viabilidad por C.I., registro de personas y donaciones con incentivos." />
+    <meta name="description" content="Portal de donantes y gestión institucional de citas, atención clínica, laboratorio e inventario de sangre." />
     <meta property="og:title" content="HemoVida - Banco de Sangre" />
-    <meta property="og:description" content="Banco de Sangre con cuentas de Recepción, Despacho y Donador: inventario de hemocomponentes, despacho con solicitud médica y cobro de servicios, padrón de reposición de pacientes, viabilidad por C.I., registro de personas y donaciones con incentivos." />
+    <meta property="og:description" content="Portal de donantes y gestión institucional de citas, atención clínica, laboratorio e inventario de sangre." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">

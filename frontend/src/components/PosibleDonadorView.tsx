@@ -31,7 +31,7 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
   onOpenAppointments,
   onOpenDigitalCard,
 }) => {
-  const persona = session.user || session.persona || {};
+  const persona = session.user;
   const estadoAptitud = session.posibleDonador?.estadoAptitud || 'No Apto';
   const tieneAnalisis = session.posibleDonador?.tieneAnalisis || false;
   const fechaRegistro = session.posibleDonador?.fechaRegistroPostulante || new Date().toISOString().split('T')[0];
@@ -166,7 +166,7 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               </p>
             </div>
             <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-              C.I. {persona.ci || 'Sin CI'}
+              C.I. {persona?.ci || 'Sin CI'}
             </span>
           </div>
 
@@ -175,14 +175,14 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1">
                 Nombres
               </span>
-              <p className="font-bold text-slate-800 text-sm">{persona.nombres || session.nombreCompleto}</p>
+              <p className="font-bold text-slate-800 text-sm">{persona?.nombres || session.nombreCompleto}</p>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
               <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1">
                 Apellidos
               </span>
-              <p className="font-bold text-slate-800 text-sm">{persona.apellidos || '—'}</p>
+              <p className="font-bold text-slate-800 text-sm">{persona?.apellidos || '—'}</p>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
@@ -198,7 +198,7 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               </span>
               <p className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-slate-400" />
-                {persona.celular || 'No especificado'}
+                {persona?.celular || 'No especificado'}
               </p>
             </div>
 
@@ -208,7 +208,7 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               </span>
               <p className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">{persona.direccion || 'Santa Cruz de la Sierra, Bolivia'}</span>
+                <span className="truncate">{persona?.direccion || 'Santa Cruz de la Sierra, Bolivia'}</span>
               </p>
             </div>
 
@@ -218,7 +218,7 @@ export const PosibleDonadorView: React.FC<PosibleDonadorViewProps> = ({
               </span>
               <p className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                {persona.ocupacion || 'Particular'}
+                {persona?.ocupacion || 'Particular'}
               </p>
             </div>
           </div>

@@ -139,10 +139,10 @@ export const DigitalCardModal: React.FC<DigitalCardModalProps> = ({
 
         {/* Public Verification Medical Status Banner */}
         {isPublicVerification && (
-          <div className={`${isPostulante ? 'bg-amber-600' : (eligibility.habilitado ? 'bg-emerald-600' : 'bg-amber-600')} text-white px-5 sm:px-6 py-3 flex items-start gap-2.5 text-xs shadow-inner`}>
+          <div className={`${isPostulante ? 'bg-amber-600' : (eligibility.isEligible ? 'bg-emerald-600' : 'bg-amber-600')} text-white px-5 sm:px-6 py-3 flex items-start gap-2.5 text-xs shadow-inner`}>
             {isPostulante ? (
               <Clock className="w-5 h-5 shrink-0 text-white mt-0.5" />
-            ) : eligibility.habilitado ? (
+            ) : eligibility.isEligible ? (
               <CheckCircle2 className="w-5 h-5 shrink-0 text-white mt-0.5" />
             ) : (
               <Calendar className="w-5 h-5 shrink-0 text-white mt-0.5" />
@@ -151,14 +151,14 @@ export const DigitalCardModal: React.FC<DigitalCardModalProps> = ({
               <p className="font-bold tracking-tight text-xs sm:text-sm">
                 {isPostulante
                   ? '📋 POSTULANTE REGISTRADO EN HEMOVIDA (EN EVALUACIÓN)'
-                  : eligibility.habilitado 
+                  : eligibility.isEligible
                     ? '✓ CERTIFICACIÓN OFICIAL: HABILITADO PARA DONAR' 
                     : '⏳ EN PERÍODO DE RECUPERACIÓN BIOLÓGICA'}
               </p>
               <p className="text-[11px] opacity-90 mt-0.5 leading-snug">
                 {isPostulante
                   ? 'Usuario registrado en la base de datos de HemoVida. Habilitado para triaje clínico presencial y primera colecta (tamizaje serológico pendiente tras extracción).'
-                  : eligibility.habilitado
+                  : eligibility.isEligible
                     ? `Donante apto y verificado en la base de datos central de HemoVida Santa Cruz (${user.sexo === 'M' ? '90 días' : '120 días'} de intervalo biológico reglamentario).`
                     : `Reposo celular en curso. Próxima fecha autorizada: ${eligibility.fechaProximaHabilitada.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} (${eligibility.diasRestantes} días restantes).`
                 }
@@ -338,9 +338,9 @@ export const DigitalCardModal: React.FC<DigitalCardModalProps> = ({
               <strong className={`px-2 py-0.5 rounded font-bold ${
                 isPostulante 
                   ? 'text-amber-800 bg-amber-100' 
-                  : (eligibility.habilitado ? 'text-emerald-700 bg-emerald-100' : 'text-amber-800 bg-amber-100')
+                  : (eligibility.isEligible ? 'text-emerald-700 bg-emerald-100' : 'text-amber-800 bg-amber-100')
               }`}>
-                {isPostulante ? 'En Evaluación (Pre-filtro)' : (eligibility.habilitado ? 'Habilitado' : 'Diferido Temporal')}
+                {isPostulante ? 'En Evaluación (Pre-filtro)' : (eligibility.isEligible ? 'Habilitado' : 'Diferido Temporal')}
               </strong>
             </div>
             <div className="flex justify-between items-center">
