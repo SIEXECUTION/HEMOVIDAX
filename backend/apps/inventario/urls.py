@@ -3,6 +3,7 @@ Rutas URL para la app Inventario.
 """
 from django.urls import path
 from .views import (
+    CatalogosView, OperacionesView, HematologiaView, SerologiaView,
     ParametroStockMinimoListView,
     ParametroStockMinimoUpdateView,
     StockAlertasListView,
@@ -15,6 +16,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path('catalogos/', CatalogosView.as_view()),
+    path('operaciones/', OperacionesView.as_view()),
+    path('laboratorio/hematologia/', HematologiaView.as_view()),
+    path('laboratorio/serologia/<int:pk>/', SerologiaView.as_view()),
     # Parametrizar Umbrales de Stock Mínimo y Alertas Críticas
     path('parametros/', ParametroStockMinimoListView.as_view(), name='stock_parametros_list'),
     path('parametros/<int:pk>/', ParametroStockMinimoUpdateView.as_view(), name='stock_parametros_update'),

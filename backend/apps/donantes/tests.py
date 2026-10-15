@@ -1,322 +1,277 @@
-"""
-Pruebas unitarias para la app Donantes y Carnet Digital de Donante.
-"""
-from django.test import TestCase
-from rest_framework.test import APIClient
-from rest_framework import status
-from datetime import date, timedelta
-from django.utils import timezone
+"""Regresiones del circuito real y protección de datos personales."""
 
-from apps.seguridad.models import Persona, PersonalSalud
-from apps.inventario.models import GrupoSanguineo, EjemplarBolsa, UnidadSangreTotal
+from datetime import timedelta
+from unittest.mock import patch
+from django.utils import timezone
+from apps.testing import WorkflowTestCase
 from .models import (
-    Donante, PosibleDonador, ExtraccionDonacion, Diferimiento,
-    TriajeClinico, CitaDonacion, RequisitoDonacion
+    Donante,
+    Diferimiento,
+    CitaDonacion,
+    DetalleCitaRequisito,
+    ExtraccionDonacion,
+    ConsentimientoInformado,
+    IncentivoEntrega,
+    AnalisisInmunoHematologico,
+    TriajeClinico,
 )
 
-class DonanteCarnetDigitalTestCase(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.hoy = timezone.now().date()
 
-        # Personal de salud para registrar extracciones
-        self.persona_enfermero = Persona.objects.create(
-            ci='ENF-1111',
-            nombres='Silvia',
-            apellidos='Guerrero',
-            fechaNacimiento=date(1992, 1, 25),
-            sexo='F'
+class DonationWorkflowTests(WorkflowTestCase):
+    def booking(self, approved=True):
+        return {
+            "idpersona": self.person.pk,
+            "fechahoraprogramada": (timezone.now() + timedelta(days=1)).isoformat(),
+            "requisitos": [
+                {"idrequisito": self.requirement.pk, "cumplerequisito": approved}
+            ],
+        }
+
+    def test_booking_and_saved_answers(self):
+        response = self.post("donantes/citas/", self.booking())
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["fase"], "Evaluación previa")
+        self.assertTrue(DetalleCitaRequisito.objects.get().cumplerequisito)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.estadoaptitud, "En Evaluacion")
+
+    def test_failed_prefilter_persists_cancelled_evaluation(self):
+        r = self.post("donantes/citas/", self.booking(False))
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(CitaDonacion.objects.get().estadocita, "Cancelada")
+        self.assertFalse(DetalleCitaRequisito.objects.get().cumplerequisito)
+        self.assertEqual(len(r.data["motivos_exclusion"]), 1)
+
+    def test_missing_or_duplicate_requirement_rejected_without_writes(self):
+        for answers in ([], [self.booking()["requisitos"][0]] * 2):
+            data = self.booking()
+            data["requisitos"] = answers
+            self.assertEqual(self.post("donantes/citas/", data).status_code, 400)
+        self.assertFalse(CitaDonacion.objects.exists())
+
+    def test_client_cannot_claim_prefilter_passed(self):
+        data = self.booking(False)
+        data["prefiltroaprobado"] = True
+        self.assertFalse(self.post("donantes/citas/", data).data["prefiltroaprobado"])
+
+    def test_second_booking_rejected(self):
+        self.assertEqual(self.post("donantes/citas/", self.booking()).status_code, 201)
+        self.assertEqual(self.post("donantes/citas/", self.booking()).status_code, 400)
+        self.assertEqual(CitaDonacion.objects.count(), 1)
+
+    def test_rest_interval_woman_and_man(self):
+        donor = Donante.objects.create(
+            idpersona=self.person,
+            carnetdigitalcodigo="DON-1",
+            fechaultimadonacion=self.today - timedelta(days=30),
         )
-        self.enfermero = PersonalSalud.objects.create(
-            persona=self.persona_enfermero,
-            cargo='Bioquímica de Flebotomía',
-            registroProfesional='FLE-2026-999'
-        )
+        for sex, remaining in [("F", 90), ("M", 60)]:
+            self.person.sexo = sex
+            self.person.save()
+            r = self.client.get(f"/api/donantes/carnet-digital/{self.person.pk}/")
+            self.assertEqual(r.data["elegibilidad"]["dias_restantes"], remaining)
+            self.assertEqual(
+                self.post("donantes/citas/", self.booking()).status_code, 400
+            )
 
-        # 1. Donante Varón (M) con donación hace 30 días (debe esperar 60 días más de los 90 reglamentarios)
-        self.persona_varon = Persona.objects.create(
-            ci='7894561-SC',
-            nombres='Carlos Andrés',
-            apellidos='Pimentel',
-            fechaNacimiento=date(1995, 4, 18),
-            sexo='M',
-            celular='76044912'
-        )
-        self.donante_varon = Donante.objects.create(
-            persona=self.persona_varon,
-            tipoDonante='Voluntario Altruista',
-            carnetDigitalCodigo='HV-DON-2024-0491',
-            estadoHabilitacion='Apto',
-            fechaUltimaDonacion=self.hoy - timedelta(days=30)
-        )
-
-        # Registrar 2 extracciones históricas (450ml + 450ml = 900ml)
-        ExtraccionDonacion.objects.create(
-            personaDonante=self.persona_varon,
-            personalSalud=self.enfermero,
-            codigoExtraccion='EXT-20260101-001',
-            brazoExtraccion='Izquierdo',
-            volumenExtraidoMl=450
-        )
-        ExtraccionDonacion.objects.create(
-            personaDonante=self.persona_varon,
-            personalSalud=self.enfermero,
-            codigoExtraccion='EXT-20260201-002',
-            brazoExtraccion='Derecho',
-            volumenExtraidoMl=450
-        )
-
-        # 2. Donante Mujer (F) con donación hace 100 días (regla: 120 días, le faltan 20 días)
-        self.persona_mujer = Persona.objects.create(
-            ci='8934120-SC',
-            nombres='Sofía Elena',
-            apellidos='Mendoza',
-            fechaNacimiento=date(1998, 9, 12),
-            sexo='F',
-            celular='78190234'
-        )
-        self.donante_mujer = Donante.objects.create(
-            persona=self.persona_mujer,
-            tipoDonante='Reposicion Familiar',
-            carnetDigitalCodigo='HV-DON-2025-1102',
-            estadoHabilitacion='Apto',
-            fechaUltimaDonacion=self.hoy - timedelta(days=100)
-        )
-
-        # 3. Posible Donador (sin análisis)
-        self.persona_posible = Persona.objects.create(
-            ci='12345678',
-            nombres='Mario',
-            apellidos='Suarez',
-            fechaNacimiento=date(2000, 5, 10),
-            sexo='M',
-            celular='70099887'
-        )
-        self.posible_donador = PosibleDonador.objects.create(
-            persona=self.persona_posible,
-            estadoAptitud='No Apto',
-            tieneAnalisis=False
-        )
-
-    def test_carnet_digital_varon_regla_90_dias(self):
-        response = self.client.get(f'/api/donantes/{self.persona_varon.ci}/carnet/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data
-
-        self.assertFalse(data['esPosibleDonador'])
-        self.assertEqual(data['carnetDigitalCodigo'], 'HV-DON-2024-0491')
-        self.assertEqual(data['ci'], '7894561-SC')
-        self.assertEqual(data['sexo'], 'M')
-        self.assertEqual(data['periodoEsperaDias'], 90)
-        self.assertEqual(data['diasRestantesEspera'], 60)
-        self.assertFalse(data['estaHabilitadoParaDonar'])
-        self.assertEqual(data['totalDonacionesHistoricas'], 2)
-        self.assertEqual(data['volumenHistoricoAportadoMl'], 900)
-        self.assertEqual(len(data['extraccionesRecientes']), 2)
-
-    def test_carnet_digital_mujer_regla_120_dias(self):
-        response = self.client.get(f'/api/donantes/{self.persona_mujer.ci}/carnet/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data
-
-        self.assertFalse(data['esPosibleDonador'])
-        self.assertEqual(data['sexo'], 'F')
-        self.assertEqual(data['periodoEsperaDias'], 120)
-        self.assertEqual(data['diasRestantesEspera'], 20)
-        self.assertFalse(data['estaHabilitadoParaDonar'])
-
-    def test_consulta_posible_donador(self):
-        response = self.client.get(f'/api/donantes/{self.persona_posible.ci}/carnet/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data
-
-        self.assertTrue(data['esPosibleDonador'])
-        self.assertEqual(data['ci'], '12345678')
-        self.assertEqual(data['estadoAptitud'], 'No Apto')
-        self.assertFalse(data['tieneAnalisis'])
-        self.assertFalse(data['estaHabilitadoParaDonar'])
-
-    def test_donante_no_encontrado(self):
-        response = self.client.get('/api/donantes/9999999-INEXISTENTE/carnet/')
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    # -------------------------------------------------------------------------
-    # CarnetDigitalQRView (/api/donantes/carnet-digital/<idpersona>/)
-    # -------------------------------------------------------------------------
-    def test_carnet_digital_qr_exitoso(self):
-        response = self.client.get(f'/api/donantes/carnet-digital/{self.persona_varon.idpersona}/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data
-
-        self.assertEqual(data['carnet_codigo'], 'HV-DON-2024-0491')
-        self.assertEqual(data['ci'], '7894561-SC')
-        self.assertEqual(data['sexo'], 'M')
-        self.assertEqual(data['intervalo_biologico_dias'], 90)
-        self.assertEqual(data['dias_restantes_espera'], 60)
-        self.assertEqual(data['semaforo_carnet'], 'Amarillo')
-        self.assertFalse(data['apto_para_donar_hoy'])
-        self.assertEqual(data['total_donaciones'], 2)
-        self.assertEqual(data['volumen_total_aportado_ml'], 900)
-        self.assertEqual(data['vidas_impactadas'], 6)
-        self.assertIn('HEMOVIDA|CARNET:HV-DON-2024-0491', data['qr_validation_string'])
-        self.assertEqual(len(data['historial_donaciones']), 2)
-
-    def test_carnet_digital_qr_diferimiento_activo(self):
-        # Crear diferimiento temporal activo de 15 días para la mujer
-        posible_mujer, _ = PosibleDonador.objects.get_or_create(
-            persona=self.persona_mujer,
-            defaults={'estadoAptitud': 'Apto', 'tieneAnalisis': True}
-        )
+    def test_indefinite_deferral_blocks_booking_and_card_is_red(self):
         Diferimiento.objects.create(
-            idposibledonador=posible_mujer,
-            motivodetallado='Tratamiento odontológico reciente',
-            diasinhabilitacion=15,
-            fechainiciodiferimiento=self.hoy,
-            fechafindiferimiento=self.hoy + timedelta(days=15)
+            idposibledonador=self.candidate,
+            fechainiciodiferimiento=self.today,
+            motivodetallado="Indefinido",
+            fechafindiferimiento=None,
+        )
+        self.assertEqual(self.post("donantes/citas/", self.booking()).status_code, 400)
+        r = self.client.get(f"/api/donantes/carnet-digital/{self.person.pk}/")
+        self.assertEqual(r.data["elegibilidad"]["semaforo"], "Rojo")
+
+    def test_card_never_invents_blood_group(self):
+        r = self.client.get(f"/api/donantes/{self.person.ci}/carnet/")
+        self.assertEqual(r.data["grupo_sanguineo"], "Pendiente de tipificación")
+        AnalisisInmunoHematologico.objects.create(
+            idposibledonador=self.candidate,
+            idpersonalsalud=self.staff,
+            etapaanalisis="Pre-Extraccion",
+            grupoaboconfirmado="AB",
+            factorrhconfirmado="Negativo",
+            pruebacoombsdirecta="Negativo",
+            pruebacoombsindirecta="Negativo",
+            rastreoanticuerposirregulares="Negativo",
+        )
+        self.assertEqual(
+            self.client.get(f"/api/donantes/{self.person.ci}/carnet/").data[
+                "grupo_sanguineo"
+            ],
+            "AB-",
         )
 
-        response = self.client.get(f'/api/donantes/carnet-digital/{self.persona_mujer.idpersona}/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data
-
-        self.assertEqual(data['semaforo_carnet'], 'Rojo')
-        self.assertFalse(data['apto_para_donar_hoy'])
-        self.assertIn('Tratamiento odontológico reciente', data['mensaje_estado'])
-
-    def test_carnet_digital_qr_no_donante(self):
-        response = self.client.get(f'/api/donantes/carnet-digital/{self.persona_posible.idpersona}/')
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-
-class OrquestacionOperacionesTestCase(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.hoy = timezone.now().date()
-
-        self.medico_per = Persona.objects.create(
-            ci='DOC-777', nombres='Valeria', apellidos='Guzman',
-            fechaNacimiento=date(1985, 5, 20), sexo='F'
+    def test_owner_access_and_other_person_denied(self):
+        self.client.force_authenticate(self.donor_user)
+        self.assertEqual(
+            self.client.get(
+                f"/api/donantes/carnet-digital/{self.person.pk}/"
+            ).status_code,
+            200,
         )
-        self.medico = PersonalSalud.objects.create(
-            persona=self.medico_per, cargo='Médico Evaluador', registroProfesional='MED-777'
+        self.assertEqual(
+            self.client.get(
+                f"/api/donantes/carnet-digital/{self.staff_person.pk}/"
+            ).status_code,
+            403,
+        )
+        self.client.force_authenticate(None)
+        self.assertEqual(
+            self.client.get(f"/api/donantes/{self.person.ci}/carnet/").status_code, 401
         )
 
-        self.postulante_per = Persona.objects.create(
-            ci='99887766', nombres='Jorge', apellidos='Torres',
-            fechaNacimiento=date(1996, 7, 10), sexo='M'
-        )
-        self.posible_donador = PosibleDonador.objects.create(
-            persona=self.postulante_per, estadoAptitud='No Apto', tieneAnalisis=False
-        )
-
-        self.grupo_o_pos = GrupoSanguineo.objects.create(
-            idgrupo=1, grupoabo='O', factorrh='Positivo'
-        )
-
-    def test_agendar_cita_exitoso(self):
-        req = RequisitoDonacion.objects.create(
-            nombrerequisito='Mayor de 18 años',
-            tiporequisito='Biometría Básica',
-            esexcluyentedefinitivo=False
-        )
-        payload = {
-            'idposibledonador': self.postulante_per.idpersona,
-            'fechahoraprogramada': timezone.now().isoformat(),
-            'tipocita': 'Voluntario Altruista',
-            'requisitos': [
-                {'idrequisito': req.idrequisito, 'cumplerequisito': True, 'observacion': 'Tiene 30 años'}
+    def test_admission_confirms_attendance_but_requires_triage(self):
+        c = self.appointment()
+        r = self.post(f"donantes/citas/{c.pk}/admision/", {})
+        self.assertTrue(r.data["asistenciaconfirmada"])
+        self.assertFalse(r.data["autoriza_flebotomia"])
+        tr = self.triage()
+        self.assertTrue(
+            self.post(f"donantes/citas/{c.pk}/admision/", {}).data[
+                "autoriza_flebotomia"
             ]
-        }
-        response = self.client.post('/api/donantes/citas/', payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('idcita', response.data)
-        self.assertEqual(response.data['requisitos_evaluados'], 1)
+        )
 
-    def test_agendar_cita_con_diferimiento_activo_falla(self):
+    def triage_data(self, **extra):
+        return dict(
+            idpersona=self.person.pk,
+            pesokg=65,
+            temperatura=36.5,
+            hemoglobina=14,
+            presionsistolica=120,
+            presiondiastolica=80,
+            **extra,
+        )
+
+    def test_triage_requires_attendance(self):
+        self.assertEqual(
+            self.post("donantes/triaje/", self.triage_data()).status_code, 400
+        )
+        self.assertFalse(TriajeClinico.objects.exists())
+
+    def test_triage_rejection_creates_deferral(self):
+        self.appointment()
+        data = self.triage_data()
+        data["pesokg"] = 49
+        data["diasinhabilitacion"] = 15
+        r = self.post("donantes/triaje/", data)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["resultadoaptitud"], "Rechazado")
+        self.assertEqual(
+            Diferimiento.objects.get().fechafindiferimiento,
+            self.today + timedelta(days=15),
+        )
+
+    def extraction_data(self, tr):
+        return dict(
+            idpersonadonante=self.person.pk,
+            idtriaje=tr.pk,
+            idgrupo=self.group.pk,
+            volumenml=450,
+            brazo="Derecho",
+            declaracionjuradaaceptada=True,
+            firmadigital="Consentimiento de prueba",
+        )
+
+    def test_extraction_consent_quarantine_and_no_duplicate(self):
+        self.appointment()
+        tr = self.triage()
+        r = self.post("donantes/flebotomia/", self.extraction_data(tr))
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(ConsentimientoInformado.objects.count(), 1)
+        self.assertEqual(ExtraccionDonacion.objects.count(), 1)
+        self.assertEqual(
+            self.post("donantes/flebotomia/", self.extraction_data(tr)).status_code, 400
+        )
+
+    def test_missing_consent_writes_nothing(self):
+        self.appointment()
+        tr = self.triage()
+        data = self.extraction_data(tr)
+        data["declaracionjuradaaceptada"] = False
+        self.assertEqual(self.post("donantes/flebotomia/", data).status_code, 400)
+        self.assertFalse(ExtraccionDonacion.objects.exists())
+
+    def test_failure_rolls_back_extraction_and_consent(self):
+        self.appointment()
+        tr = self.triage()
+        with patch(
+            "apps.donantes.views.UnidadSangreTotal.objects.create",
+            side_effect=RuntimeError("test"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.post("donantes/flebotomia/", self.extraction_data(tr))
+        self.assertFalse(ExtraccionDonacion.objects.exists())
+        self.assertFalse(ConsentimientoInformado.objects.exists())
+
+    def test_refrigerio_requires_real_extraction_and_is_unique(self):
+        self.assertEqual(
+            self.post("donantes/extracciones/999/refrigerio/", {}).status_code, 404
+        )
+        self.appointment()
+        tr = self.triage()
+        ext = self.post("donantes/flebotomia/", self.extraction_data(tr)).data[
+            "extraccion"
+        ]["idextraccion"]
+        self.assertEqual(
+            self.post(f"donantes/extracciones/{ext}/refrigerio/", {}).status_code, 201
+        )
+        self.assertEqual(
+            self.post(f"donantes/extracciones/{ext}/refrigerio/", {}).status_code, 400
+        )
+        self.assertTrue(IncentivoEntrega.objects.get().refrigerioentregado)
+
+    def test_malformed_numeric_input_is_400(self):
+        data = self.triage_data()
+        data["pesokg"] = "invalid"
+        self.assertEqual(self.post("donantes/triaje/", data).status_code, 400)
+
+    def test_expired_temporary_deferral_allows_new_prefilter(self):
+        Donante.objects.create(
+            idpersona=self.person,
+            carnetdigitalcodigo="DON-EXPIRED",
+            estadohabilitacion="Diferido Temporal",
+        )
         Diferimiento.objects.create(
-            idposibledonador=self.posible_donador,
-            motivodetallado='Tatuaje menor a 1 año',
-            diasinhabilitacion=180,
-            fechainiciodiferimiento=self.hoy,
-            fechafindiferimiento=self.hoy + timedelta(days=180)
+            idposibledonador=self.candidate,
+            fechainiciodiferimiento=self.today - timedelta(days=20),
+            fechafindiferimiento=self.today - timedelta(days=1),
+            motivodetallado="Temporal concluido",
         )
-        payload = {
-            'idposibledonador': self.postulante_per.idpersona,
-            'fechahoraprogramada': timezone.now().isoformat(),
-            'tipocita': 'Voluntario Altruista'
-        }
-        response = self.client.post('/api/donantes/citas/', payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('diferimiento activo', response.data['detail'])
+        r = self.post("donantes/citas/", self.booking())
+        self.assertEqual(r.status_code, 201, r.data)
 
-    def test_procesar_triaje_clinico_apto(self):
-        payload = {
-            'idposibledonador': self.postulante_per.idpersona,
-            'idpersonalsalud': self.medico.persona.idpersona,
-            'pesokg': 68.0,
-            'presionsistolica': 120,
-            'presiondiastolica': 80,
-            'hemoglobina': 14.5,
-            'temperatura': 36.5
-        }
-        response = self.client.post('/api/donantes/triaje/', payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['resultadoaptitud'], 'Apto')
-        self.posible_donador.refresh_from_db()
-        self.assertEqual(self.posible_donador.estadoaptitud, 'Apto')
-
-    def test_procesar_triaje_clinico_rechazado_crea_diferimiento(self):
-        payload = {
-            'idposibledonador': self.postulante_per.idpersona,
-            'idpersonalsalud': self.medico.persona.idpersona,
-            'pesokg': 46.0,  # Bajo peso < 50kg
-            'presionsistolica': 110,
-            'presiondiastolica': 70,
-            'hemoglobina': 11.0,  # Baja hemoglobina < 12.5
-            'temperatura': 37.0,
-            'diasinhabilitacion': 30
-        }
-        response = self.client.post('/api/donantes/triaje/', payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['resultadoaptitud'], 'Rechazado')
-        self.assertIsNotNone(response.data['diferimiento'])
-        self.posible_donador.refresh_from_db()
-        self.assertEqual(self.posible_donador.estadoaptitud, 'No Apto')
-
-    def test_registrar_flebotomia_y_fraccionamiento_atomic(self):
-        # 1. Crear triaje Apto
-        triaje = TriajeClinico.objects.create(
-            idposibledonador=self.posible_donador,
-            idpersonalsalud=self.medico,
-            pesokg=70.0,
-            presionsistolicammhg=120,
-            presiondiastolicammhg=80,
-            nivelhemoglobina=15.0,
-            temperatura=36.6,
-            resultadoaptitud='Apto'
+    def test_approved_analysis_selects_extraction_phase(self):
+        AnalisisInmunoHematologico.objects.create(
+            idposibledonador=self.candidate,
+            idpersonalsalud=self.staff,
+            etapaanalisis="Pre-Extraccion",
+            grupoaboconfirmado="A",
+            factorrhconfirmado="Positivo",
+            pruebacoombsdirecta="Negativo",
+            pruebacoombsindirecta="Negativo",
+            rastreoanticuerposirregulares="Negativo",
+            dictameninmunohematologico="Apto",
         )
+        r = self.post("donantes/citas/", self.booking())
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["fase"], "Extracción")
 
-        payload = {
-            'idpersonadonante': self.postulante_per.idpersona,
-            'idpersonalsalud': self.medico.persona.idpersona,
-            'idtriaje': triaje.idtriaje,
-            'idgrupo': self.grupo_o_pos.idgrupo,
-            'brazo': 'Izquierdo',
-            'volumenml': 450,
-            'categoriaetaria': 'Adulto'
-        }
-        response = self.client.post('/api/donantes/flebotomia/', payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['extraccion']['brazoextraccion'], 'Izquierdo')
-        self.assertEqual(response.data['extraccion']['idtriaje'], triaje.idtriaje)
+    def test_foreign_patient_triage_cannot_authorize_extraction(self):
+        from .models import PosibleDonador
 
-        # Verificar bolsas generadas: estrictamente 'Concentrado de Globulos Rojos' y 'Plasma Fresco Congelado'
-        bolsas = response.data['bolsas']
-        self.assertEqual(len(bolsas), 2)
-        componentes = [b['tipocomponente'] for b in bolsas]
-        self.assertIn('Concentrado de Globulos Rojos', componentes)
-        self.assertIn('Plasma Fresco Congelado', componentes)
-        for b in bolsas:
-            self.assertEqual(b['categoriaetaria'], 'Adulto')
-
-
+        other = PosibleDonador.objects.create(
+            idpersona=self.staff_person, carnetprovisionalcodigo="HV-OTHER"
+        )
+        tr = self.triage()
+        tr.idposibledonador = other
+        tr.save()
+        self.appointment()
+        self.assertEqual(
+            self.post("donantes/flebotomia/", self.extraction_data(tr)).status_code, 400
+        )
+        self.assertFalse(ExtraccionDonacion.objects.exists())

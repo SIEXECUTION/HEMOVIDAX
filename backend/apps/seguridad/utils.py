@@ -59,12 +59,12 @@ def generate_tokens_for_usuario(usuario: Usuario, rol_activo: str = None) -> dic
     refresh['username'] = usuario.username
     refresh['email'] = usuario.email
     
-    roles_list = list(usuario.roles.values('idRol', 'codigoRol', 'nombreRol'))
-    refresh['roles'] = [r['codigoRol'] for r in roles_list]
+    roles_list = list(usuario.roles.values('idrol', 'codigorol', 'nombrerol'))
+    refresh['roles'] = [r['codigorol'] for r in roles_list]
     if rol_activo:
         refresh['rolActivo'] = rol_activo
     elif roles_list:
-        refresh['rolActivo'] = roles_list[0]['codigoRol']
+        refresh['rolActivo'] = roles_list[0]['codigorol']
 
     if usuario.persona:
         refresh['ci'] = usuario.persona.ci

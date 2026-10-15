@@ -1,26 +1,15 @@
 """
 Django settings for hemovida_project.
 Configurado para el Sistema de Banco de Sangre "HemoVida"
-Integración con PostgreSQL (Local y Supabase Cloud), JWT, CORS, Koyeb y Vercel.
+Integración con Supabase, Render y Cloudflare Pages.
 """
 
 from pathlib import Path
 import os
-import socket
 from datetime import timedelta
 from dotenv import load_dotenv
 import dj_database_url
-
-# Forzar resolución IPv4 en entornos Linux / Docker / Render sin enrutamiento IPv6.
-# Evita el error "[Errno 101] Network is unreachable" de Python al conectar a smtp.gmail.com
-_original_getaddrinfo = socket.getaddrinfo
-def _ipv4_first_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-    try:
-        return _original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
-    except Exception:
-        return _original_getaddrinfo(host, port, family, type, proto, flags)
-
-socket.getaddrinfo = _ipv4_first_getaddrinfo
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,14 +18,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 # Clave secreta
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-hemovida-bloodbank-secret-key-2025-secure-token-xyz789')
+SECRET_KEY = os.getenv('SECRET_KEY', '')
 
 # Modo depuración
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
+if not SECRET_KEY:
+    if not DEBUG and 'test' not in __import__('sys').argv:
+        raise ImproperlyConfigured('Configura SECRET_KEY para producción.')
+    SECRET_KEY = 'django-insecure-local-development-only'
 
 # Hosts permitidos (Permite configurar dominios o comodín '*')
 allowed_hosts_env = os.getenv('ALLOWED_HOSTS')
-ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()] if allowed_hosts_env else ['*']
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()] if allowed_hosts_env else ['localhost', '127.0.0.1', '[::1]']
+if os.getenv('RENDER_EXTERNAL_HOSTNAME'):
+    ALLOWED_HOSTS.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
 
 # Aplicaciones instaladas
 INSTALLED_APPS = [
@@ -107,82 +102,25 @@ if 'test' in sys.argv:
             'NAME': ':memory:',
         }
     }
-elif USE_SQLITE:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+elif USE_SQLITE and DEBUG:
+    DATABASES = {'default': {
+        'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3',
+    }}
 elif DATABASE_URL:
-    import re
-    import urllib.parse
-    
-    # Sanitización exhaustiva de DATABASE_URL (remueve comillas, corchetes y urlencodea contraseñas con caracteres especiales)
-    raw_url = DATABASE_URL.strip().strip('"\'')
-    raw_url = raw_url.replace('[', '').replace(']', '')
-    
-    # Expresión regular para separar y codificar credenciales
-    m = re.match(r'^(postgres(?:ql)?:\/\/)([^:]+):(.*)@([^@\/:]+)(?::(\d+))?(\/.*)?$', raw_url)
-    if m:
-        scheme, user, password, host, port, rest = m.groups()
-        encoded_pass = urllib.parse.quote(urllib.parse.unquote(password))
-        port_str = f":{port}" if port else ""
-        rest_str = rest if rest else ""
-        clean_db_url = f"{scheme}{user}:{encoded_pass}@{host}{port_str}{rest_str}"
-    else:
-        clean_db_url = raw_url
-
-    os.environ['DATABASE_URL'] = clean_db_url
     try:
-        DATABASES = {
-            'default': dj_database_url.parse(
-                clean_db_url,
-                conn_max_age=600,
-                conn_health_checks=True,
-                ssl_require=True
-            )
-        }
-
-    except Exception as e:
-        print(f"[WARN] Error al configurar DATABASE_URL: {e}. Activando fallback a SQLite.")
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
-
-
-
+        db_config = dj_database_url.parse(
+            DATABASE_URL.strip(), conn_max_age=60, conn_health_checks=True,
+            ssl_require=not DEBUG,
+        )
+    except (ValueError, TypeError) as exc:
+        raise ImproperlyConfigured('DATABASE_URL no es una URI PostgreSQL válida.') from None
+    if db_config['ENGINE'] != 'django.db.backends.postgresql':
+        raise ImproperlyConfigured('DATABASE_URL debe apuntar a PostgreSQL / Supabase.')
+    db_config['DISABLE_SERVER_SIDE_CURSORS'] = True
+    db_config.setdefault('OPTIONS', {})['connect_timeout'] = 10
+    DATABASES = {'default': db_config}
 else:
-    # Si estamos en Render o no hay DB_HOST externo configurado, usar SQLite para evitar error 500 por localhost
-    if os.getenv('RENDER') or os.getenv('DB_HOST', 'localhost') == 'localhost':
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
-    else:
-        # Conexión estándar por parámetros individuales (PostgreSQL Remoto)
-        DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql')
-        DB_NAME = os.getenv('DB_NAME', 'Hemovida')
-        DB_USER = os.getenv('DB_USER', 'postgres')
-        DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
-        DB_HOST = os.getenv('DB_HOST')
-        DB_PORT = os.getenv('DB_PORT', '5432')
-
-        DATABASES = {
-            'default': {
-                'ENGINE': DB_ENGINE,
-                'NAME': DB_NAME,
-                'USER': DB_USER,
-                'PASSWORD': DB_PASSWORD,
-                'HOST': DB_HOST,
-                'PORT': DB_PORT,
-            }
-        }
+    raise ImproperlyConfigured('Configura DATABASE_URL con la conexión de Supabase. SQLite solo se permite explícitamente en desarrollo.')
 
 # Validación de Contraseñas (incluye el validador estricto con la política del trigger SQL)
 AUTH_PASSWORD_VALIDATORS = [
@@ -208,7 +146,6 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'apps.seguridad.authentication.CustomJWTAuthentication',
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -228,17 +165,20 @@ SIMPLE_JWT = {
 }
 
 # Configuración de CORS para Frontend React (Cloudflare Pages/Workers) y orígenes autorizados
-CORS_ALLOW_ALL_ORIGINS = True  # Permite que el frontend en Cloudflare se comunique sin bloqueos
-CORS_ORIGIN_ALLOW_ALL = True
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https?://.*\.pages\.dev$",
-    r"^https?://.*\.workers\.dev$",
-    r"^https?://.*\.vercel\.app$",
-    r"^https?://.*\.onrender\.com$",
-    r"^http://localhost:(3000|5173)$",
-    r"^http://127\.0\.0\.1:(3000|5173)$",
-]
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [v.strip() for v in os.getenv(
+    'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000' if DEBUG else ''
+).split(',') if v.strip()]
+CORS_ALLOW_CREDENTIALS = False
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -261,7 +201,10 @@ USE_TZ = True
 # Archivos estáticos y WhiteNoise para producción en Render
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

@@ -3,5 +3,6 @@
 set -o errexit
 
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements.lock.txt
+python manage.py check
 python manage.py collectstatic --no-input

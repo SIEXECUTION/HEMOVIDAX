@@ -11,7 +11,9 @@ Mapeo de tablas de PostgreSQL (Supabase):
 - analisisinmunoserologico
 - compromisodonacion
 """
+
 from django.db import models
+from apps.fields import UTCDateTimeField
 from django.utils import timezone
 
 
@@ -19,13 +21,13 @@ import copy
 
 
 ALIAS_FIELD_MAP = {
-    'idanalisisserologico': 'idanalisis',
-    'hepatitisbresultado': 'resultadohepatitisb',
-    'hepatitiscresultado': 'resultadohepatitisc',
-    'vihresultado': 'resultadovih',
-    'chagasresultado': 'resultadochagas',
-    'sifilisresultado': 'resultadosifilis',
-    'htlvresultado': 'resultadohtlv',
+    "idanalisisserologico": "idanalisis",
+    "hepatitisbresultado": "resultadohepatitisb",
+    "hepatitiscresultado": "resultadohepatitisc",
+    "vihresultado": "resultadovih",
+    "chagasresultado": "resultadochagas",
+    "sifilisresultado": "resultadosifilis",
+    "htlvresultado": "resultadohtlv",
 }
 
 
@@ -36,7 +38,7 @@ def clean_lookup(model_or_key, key=None):
     else:
         curr_model = model_or_key
 
-    parts = key.split('__')
+    parts = key.split("__")
     new_parts = []
     for part in parts:
         part_lower = part.lower()
@@ -53,27 +55,31 @@ def clean_lookup(model_or_key, key=None):
         matched_field = None
         if part_lower in fields_by_lower:
             matched_field = fields_by_lower[part_lower]
-        elif part_lower in ALIAS_FIELD_MAP and ALIAS_FIELD_MAP[part_lower] in fields_by_lower:
+        elif (
+            part_lower in ALIAS_FIELD_MAP
+            and ALIAS_FIELD_MAP[part_lower] in fields_by_lower
+        ):
             matched_field = fields_by_lower[ALIAS_FIELD_MAP[part_lower]]
-        elif f'id{part_lower}' in fields_by_lower:
-            matched_field = fields_by_lower[f'id{part_lower}']
-        elif part_lower.startswith('id') and part_lower[2:] in fields_by_lower:
+        elif f"id{part_lower}" in fields_by_lower:
+            matched_field = fields_by_lower[f"id{part_lower}"]
+        elif part_lower.startswith("id") and part_lower[2:] in fields_by_lower:
             matched_field = fields_by_lower[part_lower[2:]]
 
         if matched_field:
             new_parts.append(matched_field.name)
-            if hasattr(matched_field, 'related_model') and matched_field.related_model:
+            if hasattr(matched_field, "related_model") and matched_field.related_model:
                 curr_model = matched_field.related_model
             else:
                 curr_model = None
         else:
             new_parts.append(part_lower)
             curr_model = None
-    return '__'.join(new_parts)
+    return "__".join(new_parts)
 
 
 def clean_q(model, q):
     from django.db.models import Q
+
     if not isinstance(q, Q):
         return q
     new_q = copy.copy(q)
@@ -92,11 +98,14 @@ def clean_q(model, q):
 
 def clean_expr(model, expr):
     from django.db.models.expressions import F
+
     if isinstance(expr, str):
         return clean_lookup(model, expr)
     if isinstance(expr, F):
         return F(clean_lookup(model, expr.name))
-    if hasattr(expr, 'get_source_expressions') and hasattr(expr, 'set_source_expressions'):
+    if hasattr(expr, "get_source_expressions") and hasattr(
+        expr, "set_source_expressions"
+    ):
         sources = expr.get_source_expressions()
         if sources:
             new_sources = [clean_expr(model, s) for s in sources]
@@ -118,8 +127,12 @@ class FlexibleQuerySet(models.QuerySet):
             if not isinstance(name, str):
                 new_names.append(name)
                 continue
-            prefix = '-' if name.startswith('-') else ('' if not name.startswith('+') else '+')
-            clean_name = clean_lookup(self.model, name.lstrip('-+'))
+            prefix = (
+                "-"
+                if name.startswith("-")
+                else ("" if not name.startswith("+") else "+")
+            )
+            clean_name = clean_lookup(self.model, name.lstrip("-+"))
             new_names.append(f"{prefix}{clean_name}")
         return super().order_by(*new_names)
 
@@ -154,28 +167,40 @@ FlexibleManager = models.Manager.from_queryset(FlexibleQuerySet)
 
 
 class Persona(models.Model):
-    idpersona = models.AutoField(primary_key=True, db_column='idpersona')
-    ci = models.CharField(max_length=20, unique=True, db_column='ci')
-    nombres = models.CharField(max_length=80, db_column='nombres')
-    apellidos = models.CharField(max_length=80, db_column='apellidos')
+    idpersona = models.AutoField(primary_key=True, db_column="idpersona")
+    ci = models.CharField(max_length=20, unique=True, db_column="ci")
+    nombres = models.CharField(max_length=80, db_column="nombres")
+    apellidos = models.CharField(max_length=80, db_column="apellidos")
     sexo = models.CharField(
-        max_length=1, 
-        choices=[('M', 'Masculino'), ('F', 'Femenino'), ('O', 'Otro')],
-        db_column='sexo'
+        max_length=1,
+        choices=[("M", "Masculino"), ("F", "Femenino"), ("O", "Otro")],
+        db_column="sexo",
     )
-    fechanacimiento = models.DateField(db_column='fechanacimiento')
-    direccion = models.CharField(max_length=150, null=True, blank=True, db_column='direccion')
-    celular = models.CharField(max_length=20, null=True, blank=True, db_column='celular')
-    ocupacion = models.CharField(max_length=80, null=True, blank=True, db_column='ocupacion')
-    nacionalidad = models.CharField(max_length=50, default='Boliviana', db_column='nacionalidad')
+    fechanacimiento = models.DateField(db_column="fechanacimiento")
+    direccion = models.CharField(
+        max_length=150, null=True, blank=True, db_column="direccion"
+    )
+    celular = models.CharField(
+        max_length=20, null=True, blank=True, db_column="celular"
+    )
+    ocupacion = models.CharField(
+        max_length=80, null=True, blank=True, db_column="ocupacion"
+    )
+    nacionalidad = models.CharField(
+        max_length=50,
+        default="Boliviana",
+        null=True,
+        blank=True,
+        db_column="nacionalidad",
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'persona'
-        verbose_name = 'Persona'
-        verbose_name_plural = 'Personas'
+        db_table = "persona"
+        verbose_name = "Persona"
+        verbose_name_plural = "Personas"
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos} (CI: {self.ci})"
@@ -206,36 +231,38 @@ class PosibleDonador(models.Model):
         Persona,
         primary_key=True,
         on_delete=models.CASCADE,
-        db_column='idpersona',
-        related_name='posible_donador'
+        db_column="idpersona",
+        related_name="posible_donador",
     )
     estadoaptitud = models.CharField(
         max_length=30,
-        default='No Apto',
+        default="No Apto",
         choices=[
-            ('No Apto', 'No Apto'),
-            ('En Evaluacion', 'En Evaluacion'),
-            ('Apto', 'Apto')
+            ("No Apto", "No Apto"),
+            ("En Evaluacion", "En Evaluacion"),
+            ("Apto", "Apto"),
         ],
-        db_column='estadoaptitud'
+        db_column="estadoaptitud",
     )
-    tieneanalisis = models.BooleanField(default=False, db_column='tieneanalisis')
-    fecharegistropostulante = models.DateField(auto_now_add=True, db_column='fecharegistropostulante')
+    tieneanalisis = models.BooleanField(default=False, db_column="tieneanalisis")
+    fecharegistropostulante = models.DateField(
+        auto_now_add=True, db_column="fecharegistropostulante"
+    )
     carnetprovisionalcodigo = models.CharField(
-        max_length=40, 
-        unique=True, 
-        null=True, 
-        blank=True, 
-        db_column='carnetprovisionalcodigo'
+        max_length=40,
+        unique=True,
+        null=True,
+        blank=True,
+        db_column="carnetprovisionalcodigo",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'posibledonador'
-        verbose_name = 'Posible Donador'
-        verbose_name_plural = 'Posibles Donadores'
+        db_table = "posibledonador"
+        verbose_name = "Posible Donador"
+        verbose_name_plural = "Posibles Donadores"
 
     def __str__(self):
         return f"{self.idpersona.nombreCompleto} - {self.carnetprovisionalcodigo or 'Sin Código'} ({self.estadoaptitud})"
@@ -279,42 +306,46 @@ class PosibleDonador(models.Model):
 
 class Donante(models.Model):
     idpersona = models.OneToOneField(
-        Persona, 
-        primary_key=True, 
-        on_delete=models.CASCADE, 
-        db_column='idpersona',
-        related_name='donante'
+        Persona,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        db_column="idpersona",
+        related_name="donante",
     )
-    carnetdigitalcodigo = models.CharField(max_length=30, unique=True, db_column='carnetdigitalcodigo')
+    carnetdigitalcodigo = models.CharField(
+        max_length=30, unique=True, db_column="carnetdigitalcodigo"
+    )
     tipodonante = models.CharField(
         max_length=30,
-        default='Voluntario Altruista',
+        default="Voluntario Altruista",
         choices=[
-            ('Voluntario Altruista', 'Voluntario Altruista'),
-            ('Reposicion Familiar', 'Reposicion Familiar'),
-            ('Autologo', 'Autologo'),
+            ("Voluntario Altruista", "Voluntario Altruista"),
+            ("Reposicion Familiar", "Reposicion Familiar"),
+            ("Autologo", "Autologo"),
         ],
-        db_column='tipodonante'
+        db_column="tipodonante",
     )
     estadohabilitacion = models.CharField(
         max_length=30,
-        default='Apto',
+        default="Apto",
         choices=[
-            ('Apto', 'Apto'),
-            ('Diferido Temporal', 'Diferido Temporal'),
-            ('Diferido Definitivo', 'Diferido Definitivo'),
+            ("Apto", "Apto"),
+            ("Diferido Temporal", "Diferido Temporal"),
+            ("Diferido Definitivo", "Diferido Definitivo"),
         ],
-        db_column='estadohabilitacion'
+        db_column="estadohabilitacion",
     )
-    fechaultimadonacion = models.DateField(null=True, blank=True, db_column='fechaultimadonacion')
+    fechaultimadonacion = models.DateField(
+        null=True, blank=True, db_column="fechaultimadonacion"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'donante'
-        verbose_name = 'Donante'
-        verbose_name_plural = 'Donantes'
+        db_table = "donante"
+        verbose_name = "Donante"
+        verbose_name_plural = "Donantes"
 
     def __str__(self):
         return f"{self.idpersona.nombreCompleto} - {self.carnetdigitalcodigo} ({self.estadohabilitacion})"
@@ -365,224 +396,242 @@ class Receptor(models.Model):
         Persona,
         primary_key=True,
         on_delete=models.CASCADE,
-        db_column='idpersona',
-        related_name='receptor'
+        db_column="idpersona",
+        related_name="receptor",
     )
-    codigohistorialclinico = models.CharField(max_length=40, unique=True, db_column='codigohistorialclinico')
-    gruposanguineoreceptor = models.CharField(max_length=30, db_column='gruposanguineoreceptor')
+    codigohistorialclinico = models.CharField(
+        max_length=40, unique=True, db_column="codigohistorialclinico"
+    )
+    gruposanguineoreceptor = models.CharField(
+        max_length=20, db_column="gruposanguineoreceptor"
+    )
     idgrupo = models.ForeignKey(
-        'inventario.GrupoSanguineo',
+        "inventario.GrupoSanguineo",
         on_delete=models.RESTRICT,
         null=True,
         blank=True,
-        db_column='idgrupo'
+        db_column="idgrupo",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'receptor'
-        verbose_name = 'Receptor'
-        verbose_name_plural = 'Receptores'
+        db_table = "receptor"
+        verbose_name = "Receptor"
+        verbose_name_plural = "Receptores"
 
     def __str__(self):
         return f"{self.idpersona} - {self.codigohistorialclinico} ({self.gruposanguineoreceptor})"
 
 
 class RequisitoDonacion(models.Model):
-    idrequisito = models.AutoField(primary_key=True, db_column='idrequisito')
-    nombrerequisito = models.CharField(max_length=120, db_column='nombrerequisito')
-    tiporequisito = models.CharField(max_length=40, db_column='tiporequisito')
-    esexcluyentedefinitivo = models.BooleanField(default=False, db_column='esexcluyentedefinitivo')
+    idrequisito = models.AutoField(primary_key=True, db_column="idrequisito")
+    nombrerequisito = models.CharField(max_length=120, db_column="nombrerequisito")
+    tiporequisito = models.CharField(max_length=40, db_column="tiporequisito")
+    esexcluyentedefinitivo = models.BooleanField(
+        default=False, db_column="esexcluyentedefinitivo"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'requisitodonacion'
-        verbose_name = 'Requisito de Donación'
-        verbose_name_plural = 'Requisitos de Donación'
+        db_table = "requisitodonacion"
+        verbose_name = "Requisito de Donación"
+        verbose_name_plural = "Requisitos de Donación"
 
     def __str__(self):
         return f"{self.nombrerequisito} ({self.tiporequisito})"
 
 
 class CitaDonacion(models.Model):
-    idcita = models.AutoField(primary_key=True, db_column='idcita')
+    idcita = models.AutoField(primary_key=True, db_column="idcita")
     idpersona = models.ForeignKey(
         Persona,
         on_delete=models.CASCADE,
-        db_column='idpersona',
-        related_name='citas_donacion'
+        db_column="idpersona",
+        related_name="citas_donacion",
     )
-    fechahoraprogramada = models.DateTimeField(db_column='fechahoraprogramada')
-    prefiltroaprobado = models.BooleanField(default=False, db_column='prefiltroaprobado')
-    asistenciaconfirmada = models.BooleanField(default=False, db_column='asistenciaconfirmada')
+    fechahoraprogramada = UTCDateTimeField(db_column="fechahoraprogramada")
+    prefiltroaprobado = models.BooleanField(
+        default=False, db_column="prefiltroaprobado"
+    )
+    asistenciaconfirmada = models.BooleanField(
+        default=False, db_column="asistenciaconfirmada"
+    )
     estadocita = models.CharField(
         max_length=25,
-        default='Programada',
+        default="Programada",
         choices=[
-            ('Programada', 'Programada'),
-            ('Atendida', 'Atendida'),
-            ('Cancelada', 'Cancelada'),
-            ('Inasistencia', 'Inasistencia')
+            ("Programada", "Programada"),
+            ("Atendida", "Atendida"),
+            ("Cancelada", "Cancelada"),
+            ("Inasistencia", "Inasistencia"),
         ],
-        db_column='estadocita'
+        db_column="estadocita",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'citadonacion'
-        verbose_name = 'Cita de Donación'
-        verbose_name_plural = 'Citas de Donación'
-        ordering = ['-fechahoraprogramada']
+        db_table = "citadonacion"
+        verbose_name = "Cita de Donación"
+        verbose_name_plural = "Citas de Donación"
+        ordering = ["-fechahoraprogramada"]
 
     def __str__(self):
         return f"Cita #{self.idcita} ({self.estadocita}) - {self.fechahoraprogramada}"
 
 
 class DetalleCitaRequisito(models.Model):
-    iddetallecita = models.AutoField(primary_key=True, db_column='iddetallecita')
+    iddetallecita = models.AutoField(primary_key=True, db_column="iddetallecita")
     idcita = models.ForeignKey(
         CitaDonacion,
         on_delete=models.CASCADE,
-        db_column='idcita',
-        related_name='requisitos_evaluados'
+        db_column="idcita",
+        related_name="requisitos_evaluados",
     )
     idrequisito = models.ForeignKey(
-        RequisitoDonacion,
-        on_delete=models.CASCADE,
-        db_column='idrequisito'
+        RequisitoDonacion, on_delete=models.CASCADE, db_column="idrequisito"
     )
-    cumplerequisito = models.BooleanField(db_column='cumplerequisito')
-    observacionrespuesta = models.CharField(max_length=200, null=True, blank=True, db_column='observacionrespuesta')
+    cumplerequisito = models.BooleanField(db_column="cumplerequisito")
+    observacionrespuesta = models.CharField(
+        max_length=200, null=True, blank=True, db_column="observacionrespuesta"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'detallecitarequisito'
-        verbose_name = 'Detalle Cita Requisito'
-        verbose_name_plural = 'Detalles Citas Requisitos'
+        db_table = "detallecitarequisito"
+        verbose_name = "Detalle Cita Requisito"
+        verbose_name_plural = "Detalles Citas Requisitos"
 
 
 class TriajeClinico(models.Model):
-    idtriaje = models.AutoField(primary_key=True, db_column='idtriaje')
+    idtriaje = models.AutoField(primary_key=True, db_column="idtriaje")
     idposibledonador = models.ForeignKey(
         PosibleDonador,
         on_delete=models.CASCADE,
-        db_column='idposibledonador',
-        related_name='triajes'
+        db_column="idposibledonador",
+        related_name="triajes",
     )
     idpersonalsalud = models.ForeignKey(
-        'seguridad.PersonalSalud',
+        "seguridad.PersonalSalud",
         on_delete=models.RESTRICT,
-        db_column='idpersonalsalud',
-        related_name='triajes_realizados'
+        db_column="idpersonalsalud",
+        related_name="triajes_realizados",
     )
-    fechahora = models.DateTimeField(default=timezone.now, db_column='fechahora')
-    pesokg = models.DecimalField(max_digits=5, decimal_places=2, db_column='pesokg')
-    presionsistolicammhg = models.IntegerField(db_column='presionsistolicammhg')
-    presiondiastolicammhg = models.IntegerField(db_column='presiondiastolicammhg')
-    nivelhemoglobina = models.DecimalField(max_digits=4, decimal_places=1, db_column='nivelhemoglobina')
-    temperatura = models.DecimalField(max_digits=4, decimal_places=1, db_column='temperatura')
+    fechahora = UTCDateTimeField(default=timezone.now, db_column="fechahora")
+    pesokg = models.DecimalField(max_digits=5, decimal_places=2, db_column="pesokg")
+    presionsistolicammhg = models.IntegerField(db_column="presionsistolicammhg")
+    presiondiastolicammhg = models.IntegerField(db_column="presiondiastolicammhg")
+    nivelhemoglobina = models.DecimalField(
+        max_digits=4, decimal_places=1, db_column="nivelhemoglobina"
+    )
+    temperatura = models.DecimalField(
+        max_digits=4, decimal_places=1, db_column="temperatura"
+    )
     resultadoaptitud = models.CharField(
         max_length=20,
-        choices=[('Apto', 'Apto'), ('Rechazado', 'Rechazado')],
-        db_column='resultadoaptitud'
+        choices=[("Apto", "Apto"), ("Rechazado", "Rechazado")],
+        db_column="resultadoaptitud",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'triajeclinico'
-        verbose_name = 'Triaje Clínico'
-        verbose_name_plural = 'Triajes Clínicos'
-        ordering = ['-fechahora']
+        db_table = "triajeclinico"
+        verbose_name = "Triaje Clínico"
+        verbose_name_plural = "Triajes Clínicos"
+        ordering = ["-fechahora"]
 
     def __str__(self):
         return f"Triaje #{self.idtriaje} - {self.resultadoaptitud} ({self.fechahora})"
 
 
 class Diferimiento(models.Model):
-    iddiferimiento = models.AutoField(primary_key=True, db_column='iddiferimiento')
+    iddiferimiento = models.AutoField(primary_key=True, db_column="iddiferimiento")
     idtriaje = models.OneToOneField(
         TriajeClinico,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idtriaje',
-        related_name='diferimiento'
+        db_column="idtriaje",
+        related_name="diferimiento",
     )
     idposibledonador = models.ForeignKey(
         PosibleDonador,
         on_delete=models.CASCADE,
-        db_column='idposibledonador',
-        related_name='diferimientos'
+        db_column="idposibledonador",
+        related_name="diferimientos",
     )
-    motivodetallado = models.CharField(max_length=255, db_column='motivodetallado')
-    diasinhabilitacion = models.IntegerField(default=0, db_column='diasinhabilitacion')
-    fechainiciodiferimiento = models.DateField(db_column='fechainiciodiferimiento')
-    fechafindiferimiento = models.DateField(null=True, blank=True, db_column='fechafindiferimiento')
+    motivodetallado = models.CharField(max_length=255, db_column="motivodetallado")
+    diasinhabilitacion = models.IntegerField(default=0, db_column="diasinhabilitacion")
+    fechainiciodiferimiento = models.DateField(db_column="fechainiciodiferimiento")
+    fechafindiferimiento = models.DateField(
+        null=True, blank=True, db_column="fechafindiferimiento"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'diferimiento'
-        verbose_name = 'Diferimiento'
-        verbose_name_plural = 'Diferimientos'
-        ordering = ['-fechafindiferimiento']
+        db_table = "diferimiento"
+        verbose_name = "Diferimiento"
+        verbose_name_plural = "Diferimientos"
+        ordering = ["-fechafindiferimiento"]
 
     def __str__(self):
         return f"Diferimiento #{self.iddiferimiento} hasta {self.fechafindiferimiento}: {self.motivodetallado}"
 
 
 class ExtraccionDonacion(models.Model):
-    idextraccion = models.AutoField(primary_key=True, db_column='idextraccion')
+    idextraccion = models.AutoField(primary_key=True, db_column="idextraccion")
     idpersonadonante = models.ForeignKey(
-        Persona, 
-        on_delete=models.CASCADE, 
-        db_column='idpersonadonante',
-        related_name='extracciones'
+        Persona,
+        on_delete=models.CASCADE,
+        db_column="idpersonadonante",
+        related_name="extracciones",
     )
     idpersonalsalud = models.ForeignKey(
-        'seguridad.PersonalSalud', 
-        on_delete=models.RESTRICT, 
-        db_column='idpersonalsalud',
-        related_name='extracciones_realizadas',
-        null=True,
-        blank=True
+        "seguridad.PersonalSalud",
+        on_delete=models.RESTRICT,
+        db_column="idpersonalsalud",
+        related_name="extracciones_realizadas",
+        null=False,
+        blank=False,
     )
-    codigoextraccion = models.CharField(max_length=30, unique=True, db_column='codigoextraccion')
-    fechahora = models.DateTimeField(default=timezone.now, db_column='fechahora')
-    volumenextraidoml = models.IntegerField(db_column='volumenextraidoml')
+    codigoextraccion = models.CharField(
+        max_length=30, unique=True, db_column="codigoextraccion"
+    )
+    fechahora = UTCDateTimeField(default=timezone.now, db_column="fechahora")
+    volumenextraidoml = models.IntegerField(db_column="volumenextraidoml")
     brazoextraccion = models.CharField(
         max_length=15,
-        choices=[('Izquierdo', 'Izquierdo'), ('Derecho', 'Derecho')],
-        db_column='brazoextraccion'
+        choices=[("Izquierdo", "Izquierdo"), ("Derecho", "Derecho")],
+        db_column="brazoextraccion",
     )
     idtriaje = models.ForeignKey(
         TriajeClinico,
         null=True,
         blank=True,
         on_delete=models.RESTRICT,
-        db_column='idtriaje',
-        related_name='extracciones'
+        db_column="idtriaje",
+        related_name="extracciones",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'extracciondonacion'
-        verbose_name = 'Extracción de Donación'
-        verbose_name_plural = 'Extracciones de Donaciones'
-        ordering = ['-fechahora']
+        db_table = "extracciondonacion"
+        verbose_name = "Extracción de Donación"
+        verbose_name_plural = "Extracciones de Donaciones"
+        ordering = ["-fechahora"]
 
     def __str__(self):
         return f"{self.codigoextraccion} - {self.idpersonadonante.nombreCompleto} ({self.volumenextraidoml} ml)"
@@ -649,96 +698,117 @@ class ExtraccionDonacion(models.Model):
 
 
 class ConsentimientoInformado(models.Model):
-    idconsentimiento = models.AutoField(primary_key=True, db_column='idconsentimiento')
+    idconsentimiento = models.AutoField(primary_key=True, db_column="idconsentimiento")
     idextraccion = models.OneToOneField(
         ExtraccionDonacion,
         on_delete=models.CASCADE,
-        db_column='idextraccion',
-        related_name='consentimiento'
+        db_column="idextraccion",
+        related_name="consentimiento",
     )
-    fechafirma = models.DateTimeField(default=timezone.now, db_column='fechafirma')
-    declaracionjuradaaceptada = models.BooleanField(default=True, db_column='declaracionjuradaaceptada')
-    firmadigital = models.TextField(db_column='firmadigital')
+    fechafirma = UTCDateTimeField(default=timezone.now, db_column="fechafirma")
+    declaracionjuradaaceptada = models.BooleanField(
+        default=True, db_column="declaracionjuradaaceptada"
+    )
+    firmadigital = models.TextField(db_column="firmadigital")
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'consentimientoinformado'
-        verbose_name = 'Consentimiento Informado'
-        verbose_name_plural = 'Consentimientos Informados'
+        db_table = "consentimientoinformado"
+        verbose_name = "Consentimiento Informado"
+        verbose_name_plural = "Consentimientos Informados"
 
 
 class IncentivoEntrega(models.Model):
-    idincentivo = models.AutoField(primary_key=True, db_column='idincentivo')
+    idincentivo = models.AutoField(primary_key=True, db_column="idincentivo")
     idextraccion = models.OneToOneField(
         ExtraccionDonacion,
         on_delete=models.CASCADE,
-        db_column='idextraccion',
-        related_name='incentivo'
+        db_column="idextraccion",
+        related_name="incentivo",
     )
-    tipoarticulo = models.CharField(max_length=80, db_column='tipoarticulo')
-    refrigerioentregado = models.BooleanField(default=True, db_column='refrigerioentregado')
-    fechahoraentrega = models.DateTimeField(default=timezone.now, db_column='fechahoraentrega')
+    tipoarticulo = models.CharField(max_length=80, db_column="tipoarticulo")
+    refrigerioentregado = models.BooleanField(
+        default=True, db_column="refrigerioentregado"
+    )
+    fechahoraentrega = UTCDateTimeField(
+        default=timezone.now, db_column="fechahoraentrega"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'incentivoentrega'
-        verbose_name = 'Incentivo de Entrega'
-        verbose_name_plural = 'Incentivos de Entrega'
+        db_table = "incentivoentrega"
+        verbose_name = "Incentivo de Entrega"
+        verbose_name_plural = "Incentivos de Entrega"
 
 
 def generar_codigo_analisis():
     import uuid
+
     return f"SER-{uuid.uuid4().hex[:10].upper()}"
 
 
 class AnalisisInmunoSerologico(models.Model):
-    idanalisis = models.AutoField(primary_key=True, db_column='idanalisis')
+    idanalisis = models.AutoField(primary_key=True, db_column="idanalisis")
     idunidadmadre = models.OneToOneField(
-        'inventario.UnidadSangreTotal',
+        "inventario.UnidadSangreTotal",
         on_delete=models.CASCADE,
-        db_column='idunidadmadre',
-        related_name='analisis_serologico'
+        db_column="idunidadmadre",
+        related_name="analisis_serologico",
     )
     idpersonalsalud = models.ForeignKey(
-        'seguridad.PersonalSalud',
+        "seguridad.PersonalSalud",
         on_delete=models.RESTRICT,
-        db_column='idpersonalsalud',
-        related_name='analisis_serologicos',
-        null=True,
-        blank=True
+        db_column="idpersonalsalud",
+        related_name="analisis_serologicos",
+        null=False,
+        blank=False,
     )
     codigoanalisis = models.CharField(
-        max_length=30, 
-        unique=True, 
-        default=generar_codigo_analisis, 
-        db_column='codigoanalisis'
+        max_length=30,
+        unique=True,
+        default=generar_codigo_analisis,
+        db_column="codigoanalisis",
     )
-    fechaanalisis = models.DateTimeField(default=timezone.now, db_column='fechaanalisis')
-    resultadovih = models.CharField(max_length=20, default='No Reactivo', db_column='resultadovih')
-    resultadochagas = models.CharField(max_length=20, default='No Reactivo', db_column='resultadochagas')
-    resultadohepatitisb = models.CharField(max_length=20, default='No Reactivo', db_column='resultadohepatitisb')
-    resultadohepatitisc = models.CharField(max_length=20, default='No Reactivo', db_column='resultadohepatitisc')
-    resultadosifilis = models.CharField(max_length=20, default='No Reactivo', db_column='resultadosifilis')
-    resultadohtlv = models.CharField(max_length=20, default='No Reactivo', db_column='resultadohtlv')
+    fechaanalisis = UTCDateTimeField(default=timezone.now, db_column="fechaanalisis")
+    resultadovih = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadovih"
+    )
+    resultadochagas = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadochagas"
+    )
+    resultadohepatitisb = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadohepatitisb"
+    )
+    resultadohepatitisc = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadohepatitisc"
+    )
+    resultadosifilis = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadosifilis"
+    )
+    resultadohtlv = models.CharField(
+        max_length=20, default="No Reactivo", db_column="resultadohtlv"
+    )
     dictamenfinal = models.CharField(
         max_length=20,
-        default='Apto',
-        choices=[('Apto', 'Apto'), ('No Apto', 'No Apto')],
-        db_column='dictamenfinal'
+        default="Apto",
+        choices=[("Apto", "Apto"), ("No Apto", "No Apto")],
+        db_column="dictamenfinal",
     )
-    habilitaextraccion = models.BooleanField(default=False, db_column='habilitaextraccion')
+    habilitaextraccion = models.BooleanField(
+        default=False, db_column="habilitaextraccion"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'analisisinmunoserologico'
-        verbose_name = 'Análisis Inmuno-Serológico'
-        verbose_name_plural = 'Análisis Inmuno-Serológicos'
+        db_table = "analisisinmunoserologico"
+        verbose_name = "Análisis Inmuno-Serológico"
+        verbose_name_plural = "Análisis Inmuno-Serológicos"
 
     def __str__(self):
         return f"Análisis #{self.idanalisis} ({self.dictamenfinal})"
@@ -805,164 +875,192 @@ class AnalisisInmunoSerologico(models.Model):
 
 
 class AnalisisInmunoHematologico(models.Model):
-    idanalisishematologico = models.AutoField(primary_key=True, db_column='idanalisishematologico')
+    idanalisishematologico = models.AutoField(
+        primary_key=True, db_column="idanalisishematologico"
+    )
     idpersonalsalud = models.ForeignKey(
-        'seguridad.PersonalSalud',
+        "seguridad.PersonalSalud",
         on_delete=models.RESTRICT,
-        db_column='idpersonalsalud',
-        related_name='analisis_hematologicos'
+        db_column="idpersonalsalud",
+        related_name="analisis_hematologicos",
     )
     idposibledonador = models.ForeignKey(
         PosibleDonador,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idposibledonador'
+        db_column="idposibledonador",
     )
     idreceptor = models.ForeignKey(
         Receptor,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idreceptor'
+        db_column="idreceptor",
     )
     idunidadmadre = models.ForeignKey(
-        'inventario.UnidadSangreTotal',
+        "inventario.UnidadSangreTotal",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idunidadmadre'
+        db_column="idunidadmadre",
     )
     idcitalab = models.ForeignKey(
-        'CitaLaboratorio',
+        "CitaLaboratorio",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idcitalab'
+        db_column="idcitalab",
     )
     etapaanalisis = models.CharField(
         max_length=50,
         choices=[
-            ('Pre-Extraccion', 'Pre-Extraccion'),
-            ('Post-Extraccion', 'Post-Extraccion'),
-            ('Pre-Transfusional', 'Pre-Transfusional')
+            ("Pre-Extraccion", "Pre-Extraccion"),
+            ("Post-Extraccion", "Post-Extraccion"),
+            ("Pre-Transfusional", "Pre-Transfusional"),
         ],
-        db_column='etapaanalisis'
+        db_column="etapaanalisis",
     )
-    fechaanalisis = models.DateTimeField(default=timezone.now, db_column='fechaanalisis')
+    fechaanalisis = UTCDateTimeField(default=timezone.now, db_column="fechaanalisis")
     grupoaboconfirmado = models.CharField(
         max_length=5,
-        choices=[('A', 'A'), ('B', 'B'), ('AB', 'AB'), ('O', 'O')],
-        db_column='grupoaboconfirmado'
+        choices=[("A", "A"), ("B", "B"), ("AB", "AB"), ("O", "O")],
+        db_column="grupoaboconfirmado",
     )
     factorrhconfirmado = models.CharField(
         max_length=10,
-        choices=[('Positivo', 'Positivo'), ('Negativo', 'Negativo')],
-        db_column='factorrhconfirmado'
+        choices=[("Positivo", "Positivo"), ("Negativo", "Negativo")],
+        db_column="factorrhconfirmado",
     )
-    pruebacoombsdirecta = models.CharField(max_length=30, db_column='pruebacoombsdirecta')
-    pruebacoombsindirecta = models.CharField(max_length=30, db_column='pruebacoombsindirecta')
-    rastreoanticuerposirregulares = models.CharField(max_length=100, db_column='rastreoanticuerposirregulares')
-    observaciones = models.TextField(null=True, blank=True, db_column='observaciones')
-    fasesalina = models.CharField(max_length=30, null=True, blank=True, db_column='fasesalina')
-    fasetermica = models.CharField(max_length=30, null=True, blank=True, db_column='fasetermica')
-    dictameninmunohematologico = models.CharField(max_length=100, null=True, blank=True, db_column='dictameninmunohematologico')
+    pruebacoombsdirecta = models.CharField(
+        max_length=30, db_column="pruebacoombsdirecta"
+    )
+    pruebacoombsindirecta = models.CharField(
+        max_length=30, db_column="pruebacoombsindirecta"
+    )
+    rastreoanticuerposirregulares = models.CharField(
+        max_length=100, db_column="rastreoanticuerposirregulares"
+    )
+    observaciones = models.TextField(null=True, blank=True, db_column="observaciones")
+    fasesalina = models.CharField(
+        max_length=30, null=True, blank=True, db_column="fasesalina"
+    )
+    fasetermica = models.CharField(
+        max_length=30, null=True, blank=True, db_column="fasetermica"
+    )
+    dictameninmunohematologico = models.CharField(
+        max_length=100, null=True, blank=True, db_column="dictameninmunohematologico"
+    )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'analisisinmunohematologico'
-        verbose_name = 'Análisis Inmuno-Hematológico'
-        verbose_name_plural = 'Análisis Inmuno-Hematológicos'
+        db_table = "analisisinmunohematologico"
+        verbose_name = "Análisis Inmuno-Hematológico"
+        verbose_name_plural = "Análisis Inmuno-Hematológicos"
 
 
 class CitaLaboratorio(models.Model):
-    idcitalab = models.AutoField(primary_key=True, db_column='idcitalab')
+    idcitalab = models.AutoField(primary_key=True, db_column="idcitalab")
     idreceptor = models.ForeignKey(
         Receptor,
         on_delete=models.CASCADE,
-        db_column='idreceptor',
-        related_name='citas_laboratorio'
+        db_column="idreceptor",
+        related_name="citas_laboratorio",
     )
     idinstitucion = models.ForeignKey(
-        'inventario.InstitucionSalud',
+        "inventario.InstitucionSalud",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idinstitucion'
+        db_column="idinstitucion",
     )
-    fechahoracita = models.DateTimeField(db_column='fechahoracita')
-    fechacirugiaprogramada = models.DateField(db_column='fechacirugiaprogramada')
-    tipoanalisisrequerido = models.CharField(max_length=100, db_column='tipoanalisisrequerido')
-    muestrarecolectada = models.BooleanField(default=False, db_column='muestrarecolectada')
+    fechahoracita = UTCDateTimeField(db_column="fechahoracita")
+    fechacirugiaprogramada = models.DateField(db_column="fechacirugiaprogramada")
+    tipoanalisisrequerido = models.CharField(
+        max_length=100, db_column="tipoanalisisrequerido"
+    )
+    muestrarecolectada = models.BooleanField(
+        default=False, db_column="muestrarecolectada"
+    )
     estadocita = models.CharField(
         max_length=25,
-        default='Programada',
+        default="Programada",
         choices=[
-            ('Programada', 'Programada'),
-            ('Completada', 'Completada'),
-            ('Cancelada', 'Cancelada')
+            ("Programada", "Programada"),
+            ("Completada", "Completada"),
+            ("Cancelada", "Cancelada"),
         ],
-        db_column='estadocita'
+        db_column="estadocita",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'citalaboratorio'
-        verbose_name = 'Cita de Laboratorio'
-        verbose_name_plural = 'Citas de Laboratorio'
+        db_table = "citalaboratorio"
+        verbose_name = "Cita de Laboratorio"
+        verbose_name_plural = "Citas de Laboratorio"
 
 
 class CompromisoDonacion(models.Model):
-    idcompromiso = models.AutoField(primary_key=True, db_column='idcompromiso')
+    idcompromiso = models.AutoField(primary_key=True, db_column="idcompromiso")
     idreposicion = models.ForeignKey(
-        'inventario.ReposicionPendiente',
+        "inventario.ReposicionPendiente",
         on_delete=models.CASCADE,
-        db_column='idreposicion',
-        related_name='compromisos'
+        db_column="idreposicion",
+        related_name="compromisos",
     )
     idpersonafirmante = models.ForeignKey(
         Persona,
         on_delete=models.CASCADE,
-        db_column='idpersonafirmante',
-        related_name='compromisos_firmados'
+        db_column="idpersonafirmante",
+        related_name="compromisos_firmados",
     )
     iddonante = models.ForeignKey(
         Donante,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='iddonante',
-        related_name='compromisos_donante'
+        db_column="iddonante",
+        related_name="compromisos_donante",
     )
     idextraccion = models.ForeignKey(
         ExtraccionDonacion,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        db_column='idextraccion',
-        related_name='compromisos'
+        db_column="idextraccion",
+        related_name="compromisos",
     )
-    fechacompromiso = models.DateField(default=timezone.now, db_column='fechacompromiso')
-    donacionconcretada = models.BooleanField(default=False, db_column='donacionconcretada')
-    volumendonadoefectivoml = models.IntegerField(default=0, db_column='volumendonadoefectivoml')
+    fechacompromiso = models.DateField(
+        default=timezone.now, db_column="fechacompromiso"
+    )
+    donacionconcretada = models.BooleanField(
+        default=False, db_column="donacionconcretada"
+    )
+    volumendonadoefectivoml = models.IntegerField(
+        default=0, null=True, blank=True, db_column="volumendonadoefectivoml"
+    )
     estadocompromiso = models.CharField(
         max_length=25,
-        default='Vigente',
-        choices=[('Vigente', 'Vigente'), ('Cumplido', 'Cumplido'), ('Anulado', 'Anulado')],
-        db_column='estadocompromiso'
+        default="Vigente",
+        choices=[
+            ("Vigente", "Vigente"),
+            ("Cumplido", "Cumplido"),
+            ("Anulado", "Anulado"),
+        ],
+        db_column="estadocompromiso",
     )
 
     objects = FlexibleManager()
 
     class Meta:
         managed = False
-        db_table = 'compromisodonacion'
-        verbose_name = 'Compromiso de Donación'
-        verbose_name_plural = 'Compromisos de Donación'
+        db_table = "compromisodonacion"
+        verbose_name = "Compromiso de Donación"
+        verbose_name_plural = "Compromisos de Donación"
 
     def __str__(self):
         return f"Compromiso #{self.idcompromiso} ({self.estadocompromiso})"

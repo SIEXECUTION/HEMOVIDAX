@@ -9,8 +9,10 @@ Mapeo de tablas de PostgreSQL (Supabase):
 - bitacoraauditoria
 """
 from django.db import models
+from apps.fields import UTCDateTimeField
 from django.utils import timezone
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password, make_password, identify_hasher
+from django.utils.crypto import constant_time_compare
 from apps.donantes.models import Persona
 
 
@@ -95,18 +97,18 @@ class Usuario(models.Model):
         'donantes.Persona', 
         on_delete=models.CASCADE,
         db_column='idpersona',
-        null=True,
-        blank=True
+        null=False,
+        blank=False
     )
     username = models.CharField(max_length=50, unique=True, db_column='username')
     email = models.CharField(max_length=100, unique=True, db_column='email')
     passwordhash = models.CharField(max_length=255, db_column='passwordhash')
     estado = models.CharField(max_length=20, default='Activo', db_column='estado')
-    fechacreacion = models.DateTimeField(default=timezone.now, db_column='fechacreacion')
+    fechacreacion = UTCDateTimeField(default=timezone.now, db_column='fechacreacion')
 
     # Bloqueo progresivo y auditoría de accesos fallidos
     intentosfallidos = models.IntegerField(default=0, db_column='intentosfallidos')
-    fechabloqueohasta = models.DateTimeField(null=True, blank=True, db_column='fechabloqueohasta')
+    fechabloqueohasta = UTCDateTimeField(null=True, blank=True, db_column='fechabloqueohasta')
     totalbloqueosrecibidos = models.IntegerField(default=0, db_column='totalbloqueosrecibidos')
 
     roles = models.ManyToManyField(
@@ -180,9 +182,12 @@ class Usuario(models.Model):
         """
         if not self.passwordhash or not raw_password:
             return False
-        # 1. Comprobación directa (texto plano precargado o de procedimiento)
-        if self.passwordhash == raw_password:
-            return True
+        # Compatibilidad con contraseñas heredadas; un hash nunca es una contraseña.
+        if not self.passwordhash.startswith('$argon2'):
+            try:
+                identify_hasher(self.passwordhash)
+            except ValueError:
+                return constant_time_compare(self.passwordhash, raw_password)
         # 2. Comprobación nativa con argon2id si el hash inicia con $argon2
         if self.passwordhash.startswith('$argon2'):
             try:
@@ -236,18 +241,18 @@ class Usuario(models.Model):
 
 
 class UsuarioRol(models.Model):
+    pk = models.CompositePrimaryKey('idusuario', 'idrol')
     idusuario = models.ForeignKey(
         Usuario, 
         on_delete=models.CASCADE, 
-        db_column='idusuario', 
-        primary_key=True
+        db_column='idusuario'
     )
     idrol = models.ForeignKey(
         Rol, 
         on_delete=models.CASCADE, 
         db_column='idrol'
     )
-    fechaasignacion = models.DateTimeField(
+    fechaasignacion = UTCDateTimeField(
         default=timezone.now, 
         db_column='fechaasignacion'
     )
@@ -333,7 +338,7 @@ class BitacoraAuditoria(models.Model):
     accionrealizada = models.CharField(max_length=255, db_column='accionrealizada')
     tablaafectada = models.CharField(max_length=60, db_column='tablaafectada')
     idregistroafectado = models.IntegerField(null=True, blank=True, db_column='idregistroafectado')
-    fechahora = models.DateTimeField(default=timezone.now, db_column='fechahora')
+    fechahora = UTCDateTimeField(default=timezone.now, db_column='fechahora')
     iporigen = models.CharField(max_length=45, null=True, blank=True, db_column='iporigen')
 
     objects = FlexibleManager()

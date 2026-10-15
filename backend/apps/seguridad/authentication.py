@@ -16,7 +16,7 @@ class CustomJWTAuthentication(JWTAuthentication):
             raise InvalidToken('El token JWT no contiene un identificador de usuario válido.')
         
         try:
-            usuario = Usuario.objects.select_related('persona').prefetch_related('roles').get(idUsuario=user_id)
+            usuario = Usuario.objects.select_related('idpersona').prefetch_related('roles').get(idusuario=user_id)
         except Usuario.DoesNotExist:
             raise AuthenticationFailed('El usuario referenciado en el token no existe.')
 
@@ -24,3 +24,12 @@ class CustomJWTAuthentication(JWTAuthentication):
             raise AuthenticationFailed('La cuenta del usuario se encuentra inactiva o bloqueada.')
 
         return usuario
+
+    def authenticate(self, request):
+        result = super().authenticate(request)
+        if result:
+            usuario, _ = result
+            role = request.headers.get('X-Active-Role')
+            if role and not usuario.roles.filter(codigorol=role).exists():
+                raise AuthenticationFailed('El perfil seleccionado no está asignado a esta cuenta.')
+        return result

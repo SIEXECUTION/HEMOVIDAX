@@ -41,5 +41,18 @@ class UnmanagedModelTestRunner(DiscoverRunner):
         for model in unmanaged_models:
             model._meta.managed = True
 
-        return super().setup_databases(**kwargs)
+        self.domain_models = unmanaged_models
+        try:
+            return super().setup_databases(**kwargs)
+        except Exception:
+            for model in unmanaged_models:
+                model._meta.managed = False
+            raise
+
+    def teardown_databases(self, old_config, **kwargs):
+        try:
+            return super().teardown_databases(old_config, **kwargs)
+        finally:
+            for model in getattr(self, 'domain_models', []):
+                model._meta.managed = False
 

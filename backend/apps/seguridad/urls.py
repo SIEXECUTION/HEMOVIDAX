@@ -3,6 +3,7 @@ Rutas URL para la app de Seguridad, Autenticación y Auditoría.
 """
 from django.urls import path
 from .views import (
+    MiCuentaView, SolicitudCargoView, ResolverCargoView,
     LoginView,
     AutenticarUsuarioView,
     DesbloquearUsuarioAdminView,
@@ -17,6 +18,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path('auth/me/', MiCuentaView.as_view()),
+    path('usuarios/', UsuarioEstadoUpdateView.as_view()),
+    path('personal/solicitudes/', SolicitudCargoView.as_view()),
+    path('personal/solicitudes/<int:pk>/resolver/', ResolverCargoView.as_view()),
     # Autenticar Usuario e Iniciar Sesión (Bloqueo progresivo y multi-rol)
     path('auth/login/', AutenticarUsuarioView.as_view(), name='auth_login'),
     path('auth/autenticar/', AutenticarUsuarioView.as_view(), name='auth_autenticar'),

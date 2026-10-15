@@ -1,785 +1,536 @@
-"""
-Vistas de API REST para Seguridad, Autenticación y Auditoría
-con soporte para RBAC múltiple, Auto-registro de Posible Donador y Alta de Personal de Salud.
-"""
-import os
-import random
-from datetime import date, timedelta
-from django.utils import timezone
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db import transaction
-from django.db.models import Q
+"""Autenticación, cuentas institucionales y auditoría persistente."""
+
+import math
+from datetime import timedelta, date, datetime, time
+from django.core import signing
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction, IntegrityError, connection
+from django.db.models import Q, Func, Value, F, DateTimeField
 from django.db.models.functions import ExtractHour
 from django.shortcuts import get_object_or_404
-from django.core.cache import cache
-from django.conf import settings
-from django.contrib.auth.hashers import make_password, check_password
-
-from .models import Usuario, PersonalSalud, BitacoraAuditoria, Rol, UsuarioRol, Persona
+from django.utils import timezone
+from django.utils.crypto import salted_hmac, constant_time_compare
+from rest_framework import serializers
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import Usuario, Rol, UsuarioRol, PersonalSalud, BitacoraAuditoria
+from .permissions import IsAdminRole
 from .serializers import (
-    LoginSerializer,
     AutoRegistroPosibleDonadorSerializer,
     CrearPersonalSaludSerializer,
     PersonalSaludListSerializer,
-    UsuarioEstadoUpdateSerializer,
     BitacoraAuditoriaSerializer,
 )
-from .permissions import IsAdminRole, IsHealthStaffRole
-from .utils import get_client_ip, registrar_auditoria, enviar_correo_institucional, enviar_correo_alta_personal_salud
+from .utils import (
+    generate_tokens_for_usuario,
+    get_client_ip,
+    registrar_auditoria,
+    enviar_correo_institucional,
+)
 from .validators import validate_password_complexity
 
-# ============================================================================
-# Autenticar Usuario e Iniciar Sesión
-# ============================================================================
-def get_client_ip(request):
-    xff = request.META.get('HTTP_X_FORWARDED_FOR')
-    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '127.0.0.1')
+
+def audit(request, action, table, record, user=None):
+    role = request.headers.get("X-Active-Role")
+    if user is not None and role and not user.roles.filter(codigorol=role).exists():
+        role = "Sistema"
+    return registrar_auditoria(
+        user or request.user, action, table, record, get_client_ip(request), role
+    )
+
+
+def account_data(user):
+    p = user.idpersona
+    roles = [
+        {"id": r.idrol, "codigo": r.codigorol, "nombre": r.nombrerol}
+        for r in user.roles.all()
+    ]
+    return {
+        "idUsuario": user.idusuario,
+        "username": user.username,
+        "email": user.email,
+        "estado": user.estado,
+        "roles": roles,
+        "persona": (
+            {
+                "idPersona": p.pk,
+                "ci": p.ci,
+                "nombres": p.nombres,
+                "apellidos": p.apellidos,
+                "nombreCompleto": p.nombreCompleto,
+                "sexo": p.sexo,
+                "fechaNacimiento": p.fechanacimiento,
+            }
+            if p
+            else None
+        ),
+    }
 
 
 class AutenticarUsuarioView(APIView):
-    """Login con bloqueo progresivo (15m, 30m, 60m) y soporte multi-rol."""
     permission_classes = [AllowAny]
+    authentication_classes = []
 
+    @transaction.atomic
     def post(self, request):
-        identificador = request.data.get('identificador', '').strip()
-        if not identificador:
-            identificador = request.data.get('username', '').strip()
-        password = request.data.get('password', '')
-        ip = get_client_ip(request)
-        usuario = Usuario.objects.filter(
-            Q(username__iexact=identificador) | Q(email__iexact=identificador)
-        ).first()
-        if not usuario:
-            return Response({'error': 'Credenciales inválidas.', 'detail': 'Credenciales inválidas.'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        ahora = timezone.now()
-        # 1. Verificar si está bloqueado permanentemente
-        if usuario.estado in ['Bloqueado', 'Inactivo']:
-            msg = f'La cuenta se encuentra en estado {usuario.estado}. Contacte al Administrador.'
-            return Response({'error': msg, 'detail': msg}, status=status.HTTP_403_FORBIDDEN)
-        # 2. Verificar ventana de bloqueo temporal activa
-        if usuario.estado == 'Bloqueado Temporal' and usuario.fechabloqueohasta:
-            if usuario.fechabloqueohasta > ahora:
-                restante = int((usuario.fechabloqueohasta - ahora).total_seconds() // 60) + 1
-                return Response({
-                    'error': f'Cuenta bloqueada temporalmente por seguridad. Intente nuevamente en {restante} minuto(s).',
-                    'bloqueado_hasta': usuario.fechabloqueohasta
-                }, status=status.HTTP_403_FORBIDDEN)
-            else:
-                # Expiró el tiempo de bloqueo temporal: rehabilitar a Activo
-                usuario.estado = 'Activo'
-                usuario.intentosfallidos = 0
-                usuario.fechabloqueohasta = None
-                usuario.save()
-        # 3. Comprobar contraseña (soporta hash PBKDF2/Argon2 y texto plano de semillas iniciales)
-        es_valida = usuario.check_password(password) or check_password(password, usuario.passwordhash) or (usuario.passwordhash == password)
-        if not es_valida:
-            usuario.intentosfallidos += 1
-            if usuario.intentosfallidos >= 3:
-                usuario.totalbloqueosrecibidos += 1
-                if usuario.totalbloqueosrecibidos == 1:
-                    minutos = 15
-                elif usuario.totalbloqueosrecibidos == 2:
-                    minutos = 30
-                else:
-                    minutos = 60
-                usuario.estado = 'Bloqueado Temporal'
-                usuario.fechabloqueohasta = ahora + timedelta(minutes=minutos)
-                usuario.save()
-                BitacoraAuditoria.objects.create(
-                    idusuario=usuario,
-                    rolactivo='Sistema',
-                    accionrealizada=f'Bloqueo temporal progresivo ({minutos} min) tras 3 intentos fallidos',
-                    tablaafectada='Usuario',
-                    idregistroafectado=usuario.idusuario,
-                    iporigen=ip
-                )
-                return Response({
-                    'error': f'Demasiados intentos fallidos. Cuenta bloqueada por {minutos} minutos.'
-                }, status=status.HTTP_403_FORBIDDEN)
-            usuario.save()
-            restantes = 3 - usuario.intentosfallidos
-            BitacoraAuditoria.objects.create(
-                idusuario=usuario,
-                rolactivo='Desconocido',
-                accionrealizada=f'Intento de inicio de sesión fallido ({usuario.intentosfallidos}/3)',
-                tablaafectada='Usuario',
-                idregistroafectado=usuario.idusuario,
-                iporigen=ip
-            )
-            msg = f'Contraseña incorrecta. Intentos restantes: {restantes}.'
-            return Response({'error': msg, 'detail': msg},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        # 4. Login Exitoso: Reiniciar contadores de fallo
-        usuario.intentosfallidos = 0
-        usuario.fechabloqueohasta = None
-        usuario.estado = 'Activo'
-        usuario.save()
-        roles_qs = UsuarioRol.objects.filter(idusuario=usuario).select_related('idrol')
-        roles = [{'codigo': ur.idrol.codigorol, 'nombre': ur.idrol.nombrerol} for ur in roles_qs]
-        rol_activo = request.headers.get('X-Active-Role') or (roles[0]['nombre'] if roles else 'Usuario')
-        BitacoraAuditoria.objects.create(
-            idusuario=usuario,
-            rolactivo=rol_activo,
-            accionrealizada='Inicio de Sesión Exitoso',
-            tablaafectada='Usuario',
-            idregistroafectado=usuario.idusuario,
-            iporigen=ip
+        identifier = str(
+            request.data.get("identificador") or request.data.get("username") or ""
+        ).strip()
+        password = request.data.get("password", "")
+        user = (
+            Usuario.objects.select_for_update()
+            .filter(Q(username__iexact=identifier) | Q(email__iexact=identifier))
+            .first()
         )
-
-        tokens = {}
-        try:
-            from .utils import generate_tokens_for_usuario
-            tokens = generate_tokens_for_usuario(usuario)
-        except Exception:
-            pass
-
-        roles_disponibles = [{'id': ur.idrol.idrol, 'codigo': ur.idrol.codigorol, 'nombre': ur.idrol.nombrerol} for ur in roles_qs]
-        persona_obj = getattr(usuario, 'idpersona', None)
-        nombre_completo = persona_obj.nombreCompleto if hasattr(persona_obj, 'nombreCompleto') else usuario.username
-
-        return Response({
-            'idusuario': usuario.idusuario,
-            'idpersona': usuario.idpersona_id,
-            'username': usuario.username,
-            'email': usuario.email,
-            'roles': roles,
-            'requiere_selector_rol': len(roles) > 1,
-            # Compatibilidad frontend y tokens JWT
-            'token': tokens.get('access', ''),
-            'tokens': tokens,
-            'rolesDisponibles': roles_disponibles,
-            'usuarioId': usuario.idusuario,
-            'nombreCompleto': nombre_completo,
-            'usuario': {
-                'idUsuario': usuario.idusuario,
-                'username': usuario.username,
-                'email': usuario.email,
-                'estado': usuario.estado,
-                'roles': roles_disponibles,
+        if not user:
+            return Response({"detail": "Credenciales inválidas."}, status=401)
+        if user.estado in ("Bloqueado", "Inactivo"):
+            return Response(
+                {"detail": f"Cuenta {user.estado}. Contacte al Administrador."},
+                status=403,
+            )
+        now = timezone.now()
+        until = user.fechabloqueohasta
+        if until and timezone.is_naive(until):
+            until = timezone.make_aware(until)
+        if until and until > now:
+            return Response(
+                {
+                    "detail": f"Cuenta bloqueada por {math.ceil((until - now).total_seconds() / 60)} minuto(s).",
+                    "bloqueado_hasta": until,
+                },
+                status=403,
+            )
+        if user.estado == "Bloqueado Temporal":
+            user.estado, user.intentosfallidos, user.fechabloqueohasta = (
+                "Activo",
+                0,
+                None,
+            )
+        if not user.check_password(password):
+            user.intentosfallidos += 1
+            if user.intentosfallidos >= 3:
+                user.totalbloqueosrecibidos += 1
+                minutes = (15, 30, 60)[min(user.totalbloqueosrecibidos - 1, 2)]
+                user.estado = "Bloqueado Temporal"
+                user.fechabloqueohasta = now + timedelta(minutes=minutes)
+                user.save()
+                audit(
+                    request,
+                    f"Bloqueo temporal progresivo ({minutes} min)",
+                    "Usuario",
+                    user.pk,
+                    user,
+                )
+                return Response(
+                    {"detail": f"Cuenta bloqueada por {minutes} minutos."}, status=403
+                )
+            user.save()
+            audit(request, "Intento de acceso fallido", "Usuario", user.pk, user)
+            return Response(
+                {
+                    "detail": f"Contraseña incorrecta. Intentos restantes: {3 - user.intentosfallidos}."
+                },
+                status=401,
+            )
+        user.estado, user.intentosfallidos, user.fechabloqueohasta = "Activo", 0, None
+        user.save()
+        data = account_data(user)
+        tokens = generate_tokens_for_usuario(user)
+        audit(request, "Inicio de Sesión Exitoso", "Usuario", user.pk, user)
+        return Response(
+            {
+                "usuarioId": user.pk,
+                "idusuario": user.pk,
+                "idpersona": user.idpersona_id,
+                "nombreCompleto": user.idpersona.nombreCompleto
+                if user.idpersona
+                else user.username,
+                "rolesDisponibles": data["roles"],
+                "roles": data["roles"],
+                "requiere_selector_rol": len(data["roles"]) > 1,
+                "usuario": data,
+                "tokens": tokens,
+                "token": tokens["access"],
             }
-        }, status=status.HTTP_200_OK)
+        )
 
 
 LoginView = AutenticarUsuarioView
 
 
-class DesbloquearUsuarioAdminView(APIView):
-    """Rehabilitación manual de cuentas bloqueadas por el Administrador."""
-    permission_classes = [AllowAny]
-
-    def post(self, request, idusuario_objetivo):
-        ip = get_client_ip(request)
-        admin_id = request.data.get('idusuario_admin')
-        
-        is_admin = False
-        admin_user = None
-        if request.user and request.user.is_authenticated:
-            if hasattr(request.user, 'roles') and request.user.roles.filter(codigorol='ADMIN').exists():
-                is_admin = True
-                admin_user = request.user
-        elif admin_id:
-            admin_user = Usuario.objects.filter(idusuario=admin_id, estado='Activo').first()
-            if admin_user and admin_user.roles.filter(codigorol='ADMIN').exists():
-                is_admin = True
-
-        if not is_admin:
-            return Response(
-                {'error': 'Se requieren privilegios de Administrador para desbloquear cuentas.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        usuario = Usuario.objects.filter(idusuario=idusuario_objetivo).first()
-        if not usuario:
-            return Response({'error': 'Usuario no encontrado.'},
-                            status=status.HTTP_404_NOT_FOUND)
-        usuario.intentosfallidos = 0
-        usuario.fechabloqueohasta = None
-        usuario.estado = 'Activo'
-        usuario.save()
-        BitacoraAuditoria.objects.create(
-            idusuario=admin_user,
-            rolactivo='Administrador',
-            accionrealizada=f'Desbloqueo manual de cuenta de usuario {usuario.username}',
-            tablaafectada='Usuario',
-            idregistroafectado=usuario.idusuario,
-            iporigen=ip
-        )
-        return Response({'mensaje': f'Cuenta {usuario.username} rehabilitada a estado Activo.'},
-                        status=status.HTTP_200_OK)
-
-
-# ============================================================================
-# PROCEDIMIENTO 1: Auto-Registro Público de Posible Donador (Sin Admin)
-# ============================================================================
-class AutoRegistroPosibleDonadorView(APIView):
-    """
-    Endpoint: POST /api/auth/autoregistro/
-    Permite que un postulante a donante se cree una cuenta libremente.
-    Nace con rol Posible Donador (POSIBLE_DONADOR), estado No Apto y sin análisis previo.
-    """
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = AutoRegistroPosibleDonadorSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            usuario = serializer.save()
-            return Response({
-                "success": True,
-                "message": "Registro completado con éxito como Posible Donador. Estado inicial: No Apto (Sin análisis serológico).",
-                "usuario": {
-                    "idUsuario": usuario.idUsuario,
-                    "username": usuario.username,
-                    "email": usuario.email,
-                    "nombreCompleto": usuario.persona.nombreCompleto if usuario.persona else usuario.username,
-                    "rol": "Posible Donador",
-                    "codigoRol": "POSIBLE_DONADOR"
-                }
-            }, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response(
-                {"detail": f"Error al procesar el auto-registro: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
-# ============================================================================
-# PROCEDIMIENTO 2: Alta de Personal de Salud (Solo Ejecutable por Administrador)
-# ============================================================================
-class CrearPersonalSaludView(APIView):
-    """
-    Endpoint: POST /api/personal/crear/
-    Permite a un Administrador dar de alta cuentas para el personal operativo de salud
-    (Doctor de Triaje, Personal de Colecta, Bioquímico Integral, Técnico de Logística, etc.).
-    """
-    permission_classes = [IsAdminRole]
-
-    def post(self, request):
-        serializer = CrearPersonalSaludSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            nuevo_usuario = serializer.create_for_admin(request.user, serializer.validated_data)
-
-            # Envío de correo institucional con credenciales al personal de salud
-            email_enviado = enviar_correo_alta_personal_salud(
-                nombres=serializer.validated_data.get('nombres', ''),
-                apellidos=serializer.validated_data.get('apellidos', ''),
-                email=serializer.validated_data.get('email', ''),
-                username=serializer.validated_data.get('username', ''),
-                password=serializer.validated_data.get('password', ''),
-                cargo=serializer.validated_data.get('cargo', ''),
-                rol=serializer.validated_data.get('codigoRolAsignar', ''),
-                reg_prof=serializer.validated_data.get('registroProfesional', '')
-            )
-
-            return Response({
-                "success": True,
-                "message": f"Personal de salud registrado y acreditado satisfactoriamente. Se ha enviado un correo con las credenciales de acceso a {nuevo_usuario.email}.",
-                "email_enviado": email_enviado,
-                "usuario": {
-                    "idUsuario": nuevo_usuario.idUsuario,
-                    "username": nuevo_usuario.username,
-                    "email": nuevo_usuario.email,
-                    "cargo": nuevo_usuario.persona.personal_salud.cargo if hasattr(nuevo_usuario.persona, 'personal_salud') else '',
-                    "registroProfesional": nuevo_usuario.persona.personal_salud.registroProfesional if hasattr(nuevo_usuario.persona, 'personal_salud') else '',
-                    "roles": [r.codigoRol for r in nuevo_usuario.roles.all()]
-                }
-            }, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response(
-                {"detail": f"Error al crear personal de salud: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
-# ============================================================================
-# Matriz de Personal de Salud Clasificados por Rol Institucional
-# ============================================================================
-class PersonalSaludListView(APIView):
-    """
-    Endpoint: GET /api/personal/
-    Replicación de la Matriz de personal de salud clasificados por rol institucional.
-    """
-    permission_classes = [IsAdminRole]
-
+class MiCuentaView(APIView):
     def get(self, request):
-        personal_qs = PersonalSalud.objects.select_related(
-            'persona', 
-            'persona__usuario'
-        ).prefetch_related('persona__usuario__roles').all()
-
-        serializer = PersonalSaludListSerializer(personal_qs, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(account_data(request.user))
 
 
-class UsuarioEstadoUpdateView(APIView):
-    """
-    Endpoint: PATCH /api/usuarios/<id>/estado/
-    Permite a un Administrador activar, suspender o bloquear a un usuario.
-    """
+class DesbloquearUsuarioAdminView(APIView):
     permission_classes = [IsAdminRole]
 
     @transaction.atomic
-    def patch(self, request, pk):
-        usuario = get_object_or_404(Usuario, idUsuario=pk)
-        serializer = UsuarioEstadoUpdateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request, idusuario_objetivo):
+        user = get_object_or_404(
+            Usuario.objects.select_for_update(), pk=idusuario_objetivo
+        )
+        if user.estado in ("Bloqueado", "Inactivo"):
+            return Response(
+                {
+                    "detail": "La suspensión administrativa requiere revisar el estado de la cuenta."
+                },
+                status=409,
+            )
+        user.estado, user.intentosfallidos, user.fechabloqueohasta = "Activo", 0, None
+        user.save()
+        audit(request, "Desbloqueo manual de cuenta", "Usuario", user.pk)
+        return Response({"mensaje": "Cuenta rehabilitada."})
 
-        estado_anterior = usuario.estado
-        nuevo_estado = serializer.validated_data['estado']
 
-        usuario.estado = nuevo_estado
-        if nuevo_estado == 'Activo':
-            usuario.intentosFallidos = 0
-            usuario.fechaBloqueoHasta = None
-            usuario.save(update_fields=['estado', 'intentosFallidos', 'fechaBloqueoHasta'])
-        else:
-            usuario.save(update_fields=['estado'])
+class AutoRegistroPosibleDonadorView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
-        # Registro en Bitácora de Auditoría
-        ip_origen = get_client_ip(request)
-        registrar_auditoria(
-            usuario=request.user,
-            accion=f"Actualización de estado de usuario '{usuario.username}': {estado_anterior} -> {nuevo_estado}",
-            tabla='Usuario',
-            id_registro=usuario.idUsuario,
-            ip_origen=ip_origen,
-            rol_activo='Administrador'
+    def post(self, request):
+        s = AutoRegistroPosibleDonadorSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                user = s.save()
+                audit(request, "Auto-registro de postulante", "Usuario", user.pk, user)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                "La identidad, correo o usuario ya está registrado."
+            )
+        return Response(
+            {
+                "success": True,
+                "message": "Registro completado. Ya puedes iniciar sesión.",
+                "usuario": account_data(user),
+            },
+            status=201,
         )
 
-        return Response({
-            "message": f"Estado del usuario '{usuario.username}' actualizado a '{nuevo_estado}' con éxito.",
-            "idUsuario": usuario.idUsuario,
-            "username": usuario.username,
-            "estado": usuario.estado,
-            "intentosFallidos": usuario.intentosFallidos
-        }, status=status.HTTP_200_OK)
+
+class CrearPersonalSaludView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def post(self, request):
+        s = CrearPersonalSaludSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                user = s.create_for_admin(request.user, s.validated_data)
+                audit(request, "Alta de personal de salud", "Usuario", user.pk)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                "La persona, matrícula, correo o usuario ya está registrado."
+            )
+        return Response({"success": True, "usuario": account_data(user)}, status=201)
 
 
-# ============================================================================
-# Consultar y Auditar Bitácora de Eventos Forenses
-# ============================================================================
-class BitacoraAuditoriaListView(APIView):
-    """
-    Endpoint: GET /api/auditoria/
-    Filtros soportados:
-    - ?q=TEXT
-    - ?fecha_inicio=YYYY-MM-DD
-    - ?fecha_fin=YYYY-MM-DD
-    - ?id_usuario=INT
-    - ?tabla_afectada=STR
-    - ?rol_activo=STR
-    - ?fuera_turno=true
-    """
-    permission_classes = [AllowAny]
+class PersonalSaludListView(APIView):
+    permission_classes = [IsAdminRole]
 
     def get(self, request):
-        queryset = BitacoraAuditoria.objects.select_related(
-            'idusuario',
-            'idusuario__idpersona'
-        ).prefetch_related('idusuario__roles').all()
+        qs = PersonalSalud.objects.select_related(
+            "persona", "persona__usuario"
+        ).prefetch_related("persona__usuario__roles")
+        return Response(PersonalSaludListSerializer(qs, many=True).data)
 
-        # Filtro especial: Operaciones fuera del turno central 19:00 - 07:00
-        fuera_turno = request.query_params.get('fuera_turno', '').lower() in ('true', '1')
-        if fuera_turno:
-            roles_lab = ['BIOQ_INTEGRAL', 'Bioquímico(a) Integral', 'Bioquímico Serólogo', 'TEC_LOGISTICA']
-            queryset = queryset.filter(
-                Q(rolactivo__in=roles_lab) | Q(idusuario__roles__codigorol__in=roles_lab)
-            ).annotate(
-                hora=ExtractHour('fechahora')
-            ).filter(
-                Q(hora__lt=7) | Q(hora__gt=19)
-            )
 
-        # Filtro por rango de fechas
-        fecha_inicio = request.query_params.get('fecha_inicio')
-        if fecha_inicio:
-            queryset = queryset.filter(fechahora__date__gte=fecha_inicio)
+class UsuarioEstadoUpdateView(APIView):
+    permission_classes = [IsAdminRole]
 
-        fecha_fin = request.query_params.get('fecha_fin')
-        if fecha_fin:
-            queryset = queryset.filter(fechahora__date__lte=fecha_fin)
-
-        # Filtro por usuario
-        id_usuario = request.query_params.get('id_usuario')
-        if id_usuario:
-            queryset = queryset.filter(idusuario__idusuario=id_usuario)
-
-        # Filtro por rol activo
-        rol_activo_param = request.query_params.get('rol_activo') or request.query_params.get('rolActivo')
-        if rol_activo_param and rol_activo_param.lower() != 'all':
-            queryset = queryset.filter(rolactivo__icontains=rol_activo_param)
-
-        # Filtro por tabla afectada
-        tabla_afectada = request.query_params.get('tabla_afectada')
-        if tabla_afectada and tabla_afectada.lower() != 'all':
-            tablas = [t.strip() for t in tabla_afectada.split(',') if t.strip()]
-            if len(tablas) == 1:
-                queryset = queryset.filter(tablaafectada__iexact=tablas[0])
-            else:
-                queryset = queryset.filter(tablaafectada__in=tablas)
-
-        # Búsqueda textual amplia (?q=)
-        query_text = request.query_params.get('q', '').strip()
-        if query_text:
-            queryset = queryset.filter(
-                Q(accionrealizada__icontains=query_text) |
-                Q(tablaafectada__icontains=query_text) |
-                Q(rolactivo__icontains=query_text) |
-                Q(iporigen__icontains=query_text) |
-                Q(idusuario__username__icontains=query_text) |
-                Q(idusuario__idpersona__nombres__icontains=query_text) |
-                Q(idusuario__idpersona__apellidos__icontains=query_text) |
-                Q(idusuario__idpersona__ci__icontains=query_text)
-            )
-
-        queryset = queryset.order_by('-fechahora')
-
-        serializer = BitacoraAuditoriaSerializer(queryset, many=True)
-        return Response({
-            "totalRegistros": queryset.count(),
-            "esFiltroFueraTurno": fuera_turno,
-            "eventos": serializer.data
-        }, status=status.HTTP_200_OK)
-
-    def post(self, request):
-        """
-        Endpoint: POST /api/auditoria/
-        Registra un evento de auditoría forense con rolActivo.
-        """
-        accion = request.data.get('accion') or request.data.get('accionRealizada') or 'Operación en Plataforma'
-        tabla = request.data.get('tabla') or request.data.get('tablaAfectada') or 'Usuario'
-        id_reg = request.data.get('idRegistroAfectado') or request.data.get('id_registro', 0)
-        id_usuario = request.data.get('idUsuario')
-        rol_activo = request.data.get('rolActivo') or request.data.get('rol_activo') or request.data.get('rol', '')
-        ip_origen = get_client_ip(request)
-
-        usuario_obj = None
-        if request.user and request.user.is_authenticated and isinstance(request.user, Usuario):
-            usuario_obj = request.user
-        elif id_usuario:
-            usuario_obj = Usuario.objects.filter(idUsuario=id_usuario).first()
-
-        try:
-            id_registro_val = int(id_reg) if id_reg is not None and str(id_reg).isdigit() else 0
-        except (ValueError, TypeError):
-            id_registro_val = 0
-
-        evento = registrar_auditoria(
-            usuario=usuario_obj,
-            accion=accion,
-            tabla=tabla,
-            id_registro=id_registro_val,
-            ip_origen=ip_origen,
-            rol_activo=rol_activo
+    def get(self, request, pk=None):
+        return Response(
+            [
+                account_data(u)
+                for u in Usuario.objects.select_related("idpersona").prefetch_related(
+                    "roles"
+                )
+            ]
         )
 
-        serializer = BitacoraAuditoriaSerializer(evento)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    @transaction.atomic
+    def patch(self, request, pk):
+        user = get_object_or_404(Usuario.objects.select_for_update(), pk=pk)
+        state = request.data.get("estado")
+        if state not in ("Activo", "Inactivo", "Bloqueado"):
+            raise serializers.ValidationError("Estado inválido.")
+        if user.pk == request.user.pk and state != "Activo":
+            raise serializers.ValidationError("No puedes suspender tu propia cuenta.")
+        user.estado = state
+        if state == "Activo":
+            user.intentosfallidos, user.fechabloqueohasta = 0, None
+        user.save()
+        audit(request, f"Estado de cuenta: {state}", "Usuario", user.pk)
+        return Response(account_data(user))
 
 
-# ============================================================================
-# RECUPERACIÓN Y MODIFICACIÓN DE CONTRASEÑA
-# ============================================================================
+class SolicitudCargoView(APIView):
+    def get(self, request):
+        qs = BitacoraAuditoria.objects.filter(
+            tablaafectada="PersonalSalud",
+            accionrealizada__startswith="Solicitud de cargo:",
+        )
+        if not IsAdminRole().has_permission(request, self):
+            qs = qs.filter(idusuario=request.user)
+        resolved = set(
+            BitacoraAuditoria.objects.filter(
+                tablaafectada="SolicitudCargo"
+            ).values_list("idregistroafectado", flat=True)
+        )
+        result = []
+        for event in qs.select_related("idusuario__idpersona"):
+            p = PersonalSalud.objects.filter(pk=event.idregistroafectado).first()
+            result.append(
+                {
+                    "id": event.pk,
+                    "usuario": event.idusuario.username,
+                    "cargo": p.cargo if p else "",
+                    "registroprofesional": p.registroprofesional if p else "",
+                    "codigo": event.accionrealizada.split(":", 1)[1],
+                    "pendiente": event.pk not in resolved,
+                }
+            )
+        return Response(result)
+
+    @transaction.atomic
+    def post(self, request):
+        user = get_object_or_404(
+            Usuario.objects.select_for_update(), pk=request.user.pk
+        )
+        if not user.idpersona_id:
+            raise serializers.ValidationError(
+                "La cuenta debe tener una persona asociada."
+            )
+        code = request.data.get("codigo", "")
+        if code not in (
+            "DOC_TRIAJE",
+            "PERS_COLECTA",
+            "BIOQ_INTEGRAL",
+            "TEC_LOGISTICA",
+            "MED_SOLICITANTE",
+        ):
+            raise serializers.ValidationError("Cargo no disponible para solicitud.")
+        if user.roles.filter(codigorol=code).exists():
+            raise serializers.ValidationError("Ya tienes asignado este perfil.")
+        previous = BitacoraAuditoria.objects.filter(
+            idusuario=user,
+            tablaafectada="PersonalSalud",
+            accionrealizada=f"Solicitud de cargo:{code}",
+        )
+        resolved = BitacoraAuditoria.objects.filter(
+            tablaafectada="SolicitudCargo"
+        ).values_list("idregistroafectado", flat=True)
+        if previous.exclude(idauditoria__in=resolved).exists():
+            raise serializers.ValidationError(
+                "Ya hay una solicitud pendiente para este perfil."
+            )
+        s = type(
+            "Cargo",
+            (serializers.Serializer,),
+            {
+                "cargo": serializers.CharField(max_length=80),
+                "registroprofesional": serializers.CharField(max_length=40),
+            },
+        )(data=request.data)
+        s.is_valid(raise_exception=True)
+        if PersonalSalud.objects.filter(pk=user.idpersona_id).exists():
+            p = PersonalSalud.objects.get(pk=user.idpersona_id)
+            if (p.cargo, p.registroprofesional) != (
+                s.validated_data["cargo"],
+                s.validated_data["registroprofesional"],
+            ):
+                raise serializers.ValidationError(
+                    "Los datos deben coincidir con la acreditación profesional registrada."
+                )
+        else:
+            if PersonalSalud.objects.filter(
+                registroprofesional=s.validated_data["registroprofesional"]
+            ).exists():
+                raise serializers.ValidationError("Matrícula ya registrada.")
+            PersonalSalud.objects.create(persona=user.idpersona, **s.validated_data)
+        event = audit(
+            request, f"Solicitud de cargo:{code}", "PersonalSalud", user.idpersona_id
+        )
+        return Response(
+            {"id": event.pk, "mensaje": "Solicitud pendiente de revisión."}, status=201
+        )
+
+
+class ResolverCargoView(APIView):
+    permission_classes = [IsAdminRole]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        event = get_object_or_404(
+            BitacoraAuditoria.objects.select_for_update(),
+            pk=pk,
+            tablaafectada="PersonalSalud",
+            accionrealizada__startswith="Solicitud de cargo:",
+        )
+        user = Usuario.objects.select_for_update().get(pk=event.idusuario_id)
+        if BitacoraAuditoria.objects.filter(
+            tablaafectada="SolicitudCargo", idregistroafectado=pk
+        ).exists():
+            return Response({"detail": "Solicitud ya resuelta."}, status=409)
+        approve = request.data.get("aprobar")
+        if not isinstance(approve, bool):
+            raise serializers.ValidationError("Indica aprobar como booleano.")
+        if approve:
+            role = get_object_or_404(
+                Rol, codigorol=event.accionrealizada.split(":", 1)[1]
+            )
+            UsuarioRol.objects.get_or_create(idusuario=user, idrol=role)
+        audit(
+            request,
+            "Cargo aprobado" if approve else "Cargo rechazado",
+            "SolicitudCargo",
+            pk,
+        )
+        return Response({"mensaje": "Solicitud resuelta."})
+
+
+class BitacoraAuditoriaListView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        qs = BitacoraAuditoria.objects.select_related("idusuario__idpersona").all()
+        night = request.query_params.get("fuera_turno") in ("true", "1")
+        if night:
+            timestamp = (
+                Func(
+                    Value("UTC"),
+                    F("fechahora"),
+                    function="timezone",
+                    output_field=DateTimeField(),
+                )
+                if connection.vendor == "postgresql"
+                else F("fechahora")
+            )
+            qs = qs.annotate(hora=ExtractHour(timestamp)).filter(
+                Q(hora__gte=19) | Q(hora__lt=7)
+            )
+        for key, lookup in [
+            ("fecha_inicio", "fechahora__gte"),
+            ("fecha_fin", "fechahora__lt"),
+            ("id_usuario", "idusuario_id"),
+            ("tabla_afectada", "tablaafectada__iexact"),
+        ]:
+            value = request.query_params.get(key)
+            if value and value != "all":
+                try:
+                    if key.startswith("fecha"):
+                        day = date.fromisoformat(value)
+                        if key == "fecha_fin":
+                            day += timedelta(days=1)
+                        value = timezone.make_aware(datetime.combine(day, time.min))
+                    if key == "id_usuario":
+                        value = int(value)
+                except ValueError:
+                    raise serializers.ValidationError(f"Filtro inválido: {key}.")
+                qs = qs.filter(**{lookup: value})
+        q = request.query_params.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                Q(accionrealizada__icontains=q)
+                | Q(tablaafectada__icontains=q)
+                | Q(idusuario__username__icontains=q)
+                | Q(idusuario__idpersona__ci__icontains=q)
+            )
+        return Response(
+            {
+                "totalRegistros": qs.count(),
+                "esFiltroFueraTurno": night,
+                "eventos": BitacoraAuditoriaSerializer(
+                    qs.order_by("-fechahora")[:1000], many=True
+                ).data,
+            }
+        )
+
+
+def password_version(user):
+    return salted_hmac("password-reset-version", user.passwordhash).hexdigest()
+
+
 class PasswordResetRequestView(APIView):
-    """
-    Endpoint: POST /api/auth/recuperar-password/solicitar/
-    """
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
-        email_input = request.data.get('email', '').strip()
-        if not email_input:
-            return Response(
-                {"detail": "Debe proporcionar su correo electrónico o nombre de usuario."},
-                status=status.HTTP_400_BAD_REQUEST
+        identifier = str(request.data.get("email", "")).strip()
+        user = Usuario.objects.filter(
+            Q(email__iexact=identifier) | Q(username__iexact=identifier)
+        ).first()
+        if user:
+            token = signing.dumps(
+                {"uid": user.pk, "v": password_version(user)}, salt="hemovida-reset"
             )
-
-        email = email_input.lower()
-        usuario = None
-        try:
-            usuario = Usuario.objects.filter(email__iexact=email).first()
-            if not usuario:
-                usuario = Usuario.objects.filter(username__iexact=email_input).first()
-                if usuario:
-                    email = usuario.email.lower()
-        except Exception as e:
-            print(f"[WARN DB] Error al consultar usuario en base de datos: {e}")
-
-        if not email or '@' not in email:
-            if usuario and usuario.email and '@' in usuario.email:
-                email = usuario.email.lower()
-            else:
+            sent = enviar_correo_institucional(
+                "HemoVida - Recuperación de contraseña",
+                f"Código de recuperación (válido 15 minutos):\n{token}\nSi no lo solicitaste, ignora este correo.",
+                "",
+                user.email,
+            )
+            if not sent:
                 return Response(
-                    {"detail": "Debe proporcionar un correo electrónico válido asociado a una cuenta activa."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {
+                        "detail": "No se pudo enviar el correo. Contacta al administrador."
+                    },
+                    status=503,
                 )
-
-        nombre_saludo = (
-            usuario.persona.nombreCompleto if usuario and usuario.persona 
-            else (usuario.username if usuario else email.split('@')[0])
+            audit(
+                request,
+                "Solicitud de recuperación de contraseña",
+                "Usuario",
+                user.pk,
+                user,
+            )
+        return Response(
+            {
+                "success": True,
+                "message": "Si la cuenta existe, recibirás un código por correo.",
+            }
         )
-        code = f"{random.randint(100000, 999999)}"
-        user_id = usuario.idUsuario if usuario else None
-
-        # Almacenar en caché bajo el email y bajo el username para resolución infalible
-        cache.set(f"pwd_reset_{email}", {"code": code, "user_id": user_id}, timeout=900)
-        if usuario and usuario.username:
-            cache.set(f"pwd_reset_{usuario.username.lower()}", {"code": code, "user_id": user_id}, timeout=900)
-
-        asunto = f"HemoVida - Código de Recuperación: {code}"
-        mensaje_texto = (
-            f"Estimado/a {nombre_saludo},\n\n"
-            f"Ha solicitado restablecer su contraseña en el Banco de Sangre y Transfusión HemoVida.\n\n"
-            f"Su código de verificación y confirmación de correo es:\n\n"
-            f"   >> {code} <<\n\n"
-            f"Este código es válido durante los próximos 15 minutos.\n"
-            f"Si usted no solicitó este cambio, ignore este mensaje.\n\n"
-            f"Atentamente,\n"
-            f"Seguridad Institucional - Banco de Sangre HemoVida\n"
-            f"Santa Cruz de la Sierra, Bolivia"
-        )
-        mensaje_html = f"""
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <div style="background: linear-gradient(135deg, #881337 0%, #e11d48 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
-                <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Banco de Sangre HemoVida</h1>
-                <p style="margin: 6px 0 0 0; font-size: 13px; color: #fecdd3; opacity: 0.95;">Seguridad Transfusional & Autenticación de Acceso</p>
-            </div>
-            <div style="padding: 32px 28px; color: #334155; line-height: 1.6;">
-                <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0;">Recuperación de Contraseña</h2>
-                <p style="font-size: 14px; margin-bottom: 20px;">
-                    Estimado/a <strong>{nombre_saludo}</strong>, hemos recibido una solicitud para restablecer la contraseña de su cuenta asociada a <strong>{email}</strong>.
-                </p>
-                <div style="background: #fff1f2; border: 2px dashed #f43f5e; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-                    <span style="display: block; font-size: 12px; text-transform: uppercase; font-weight: 700; color: #9f1239; letter-spacing: 1px; margin-bottom: 8px;">Su Código de Verificación</span>
-                    <span style="font-family: 'Consolas', 'Monaco', monospace; font-size: 36px; font-weight: 800; color: #be123c; letter-spacing: 6px;">{code}</span>
-                    <span style="display: block; font-size: 11px; color: #9f1239; margin-top: 8px;">Válido durante 15 minutos</span>
-                </div>
-                <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
-                    Ingrese este código de 6 dígitos en la ventana de verificación para establecer su nueva contraseña de acceso.
-                </p>
-            </div>
-            <div style="background: #f8fafc; padding: 14px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-                Banco de Sangre HemoVida &copy; 2026 &bull; Seguridad & Bitácora Forense
-            </div>
-        </div>
-        """
-
-        email_enviado = enviar_correo_institucional(asunto, mensaje_texto, mensaje_html, email)
-
-        if usuario:
-            try:
-                registrar_auditoria(
-                    usuario=usuario,
-                    accion=f"Solicitud de token de recuperación de contraseña para {email}",
-                    tabla='Usuario',
-                    id_registro=usuario.idUsuario,
-                    ip_origen=get_client_ip(request),
-                    rol_activo='Usuario'
-                )
-            except Exception:
-                pass
-
-        return Response({
-            "success": True,
-            "message": f"Se ha enviado un código de verificación de 6 dígitos al correo {email}.",
-            "email": email,
-            "code": code,
-            "email_enviado": email_enviado
-        }, status=status.HTTP_200_OK)
 
 
 class PasswordResetConfirmView(APIView):
-    """
-    Endpoint: POST /api/auth/recuperar-password/confirmar/
-    """
     permission_classes = [AllowAny]
+    authentication_classes = []
 
+    @transaction.atomic
     def post(self, request):
-        email = request.data.get('email', '').strip().lower()
-        token = request.data.get('token', '').strip()
-        new_password = request.data.get('new_password', '')
-
-        if not email or not token or not new_password:
-            return Response(
-                {"detail": "Email, código de token y nueva contraseña son obligatorios."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Buscar en cache por email o username
-        cached_data = cache.get(f"pwd_reset_{email}")
-        if not cached_data:
-            cached_data = cache.get(f"pwd_reset_{email.split('@')[0]}")
-
-        if not cached_data or cached_data.get('code') != token:
-            return Response(
-                {"detail": "El código de verificación es inválido o ha expirado. Por favor solicite uno nuevo."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         try:
-            validate_password_complexity(new_password)
-        except Exception as err:
-            err_msg = str(err.messages if hasattr(err, 'messages') else err)
-            return Response({"detail": err_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-        usuario = Usuario.objects.filter(
-            Q(email__iexact=email) | Q(username__iexact=email) | Q(username__iexact=email.split('@')[0])
-        ).first()
-
-        if usuario:
-            usuario.passwordHash = make_password(new_password)
-            usuario.save(update_fields=['passwordHash'])
-        else:
-            return Response({"detail": "Usuario no encontrado para el correo indicado."}, status=status.HTTP_404_NOT_FOUND)
-
-        cache.delete(f"pwd_reset_{email}")
-        if usuario:
-            cache.delete(f"pwd_reset_{usuario.email.lower()}")
-            cache.delete(f"pwd_reset_{usuario.username.lower()}")
-
-        try:
-            registrar_auditoria(
-                usuario=usuario,
-                accion=f"Restablecimiento exitoso de contraseña mediante token para {usuario.username}",
-                tabla='Usuario',
-                id_registro=usuario.idUsuario,
-                ip_origen=get_client_ip(request),
-                rol_activo='Usuario'
+            payload = signing.loads(
+                request.data.get("token", ""), salt="hemovida-reset", max_age=900
             )
-        except Exception:
-            pass
+            user = Usuario.objects.select_for_update().get(pk=payload["uid"])
+            if not constant_time_compare(payload["v"], password_version(user)):
+                raise signing.BadSignature()
+        except (signing.BadSignature, Usuario.DoesNotExist, KeyError, TypeError):
+            raise serializers.ValidationError("Código inválido, usado o vencido.")
+        return update_password(request, user)
 
-        return Response({
-            "success": True,
-            "message": "Su contraseña ha sido actualizada con éxito. Ya puede iniciar sesión con su nueva clave."
-        }, status=status.HTTP_200_OK)
+
+def update_password(request, user):
+    password = request.data.get("new_password", "")
+    try:
+        validate_password_complexity(password)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError(exc.messages)
+    user.set_password(password)
+    user.save(update_fields=["passwordhash"])
+    audit(request, "Contraseña actualizada", "Usuario", user.pk, user)
+    return Response({"success": True, "message": "Contraseña actualizada."})
 
 
 class PasswordChangeView(APIView):
-    """
-    Endpoint: POST /api/auth/cambiar-password/
-    Modifica la contraseña desde sesión activa vía contraseña actual o token de correo.
-    """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def post(self, request):
-        email = request.data.get('email', '').strip().lower()
-        current_password = request.data.get('current_password', '')
-        token = request.data.get('token', '').strip()
-        new_password = request.data.get('new_password', '')
-        rol_activo = request.data.get('rolActivo', 'Usuario')
-
-        if not email or not new_password:
-            return Response(
-                {"detail": "Debe especificar el email y la nueva contraseña."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        usuario = Usuario.objects.prefetch_related('roles').filter(email__iexact=email).first()
-        if not usuario:
-            uname = email.split('@')[0]
-            usuario = Usuario.objects.prefetch_related('roles').filter(username__iexact=uname).first()
-
-        if not usuario:
-            # Buscar si existe persona asociada al email, carnet o CI
-            uname = email.split('@')[0]
-            persona = Persona.objects.filter(Q(ci__iexact=uname) | Q(ci__iexact=email)).first()
-            if not persona:
-                from apps.donantes.models import Donante
-                donante = Donante.objects.select_related('persona').filter(
-                    Q(carnetDigitalCodigo__iexact=uname) | Q(persona__ci__iexact=uname)
-                ).first()
-                if donante:
-                    persona = donante.persona
-
-            if persona:
-                rol_don = Rol.objects.filter(codigoRol='DONANTE').first() or Rol.objects.filter(codigoRol='POSIBLE_DONADOR').first()
-                usuario = Usuario.objects.create(
-                    persona=persona,
-                    username=uname[:50],
-                    email=email,
-                    passwordHash=make_password(new_password),
-                    estado='Activo'
-                )
-                if rol_don:
-                    UsuarioRol.objects.create(usuario=usuario, rol=rol_don)
-
-                try:
-                    registrar_auditoria(
-                        usuario=usuario,
-                        accion=f"Creación y asignación de contraseña para donante {usuario.username}",
-                        tabla='Usuario',
-                        id_registro=usuario.idUsuario,
-                        ip_origen=get_client_ip(request),
-                        rol_activo='Donante'
-                    )
-                except Exception:
-                    pass
-                return Response({
-                    "success": True,
-                    "message": "Contraseña modificada y usuario activado satisfactoriamente."
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({"detail": "Usuario no encontrado en la base de datos."}, status=status.HTTP_404_NOT_FOUND)
-
-        if current_password:
-            if not usuario.check_password(current_password):
-                return Response(
-                    {"detail": "La contraseña actual ingresada es incorrecta."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        elif token:
-            cached_data = cache.get(f"pwd_reset_{email}")
-            if not cached_data and usuario:
-                cached_data = cache.get(f"pwd_reset_{usuario.email.lower()}") or cache.get(f"pwd_reset_{usuario.username.lower()}")
-            if not cached_data or cached_data.get('code') != token:
-                return Response(
-                    {"detail": "El código de verificación es inválido o ha expirado."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            cache.delete(f"pwd_reset_{email}")
-            if usuario:
-                cache.delete(f"pwd_reset_{usuario.email.lower()}")
-                cache.delete(f"pwd_reset_{usuario.username.lower()}")
-        else:
-            return Response(
-                {"detail": "Debe ingresar su contraseña actual o un token válido de verificación."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            validate_password_complexity(new_password)
-        except Exception as err:
-            err_msg = str(err.messages if hasattr(err, 'messages') else err)
-            return Response({"detail": err_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-        usuario.passwordHash = make_password(new_password)
-        usuario.save(update_fields=['passwordHash'])
-
-        try:
-            metodo = "contraseña actual" if current_password else "token por correo"
-            registrar_auditoria(
-                usuario=usuario,
-                accion=f"Cambio de contraseña exitoso ({metodo}) para {usuario.username}",
-                tabla='Usuario',
-                id_registro=usuario.idUsuario,
-                ip_origen=get_client_ip(request),
-                rol_activo=rol_activo
-            )
-        except Exception:
-            pass
-
-        return Response({
-            "success": True,
-            "message": "Contraseña modificada satisfactoriamente."
-        }, status=status.HTTP_200_OK)
+        user = Usuario.objects.select_for_update().get(pk=request.user.pk)
+        if not user.check_password(request.data.get("current_password", "")):
+            raise serializers.ValidationError("La contraseña actual es incorrecta.")
+        return update_password(request, user)

@@ -1,0 +1,1098 @@
+{
+  "analisisinmunohematologico": {
+    "idanalisishematologico": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idposibledonador": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idreceptor": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idunidadmadre": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idcitalab": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "etapaanalisis": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "fechaanalisis": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "grupoaboconfirmado": {
+      "nullable": false,
+      "type": "character varying(5)"
+    },
+    "factorrhconfirmado": {
+      "nullable": false,
+      "type": "character varying(10)"
+    },
+    "pruebacoombsdirecta": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "pruebacoombsindirecta": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "rastreoanticuerposirregulares": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "observaciones": {
+      "nullable": true,
+      "type": "\"text\""
+    },
+    "fasesalina": {
+      "nullable": true,
+      "type": "character varying(30)"
+    },
+    "fasetermica": {
+      "nullable": true,
+      "type": "character varying(30)"
+    },
+    "dictameninmunohematologico": {
+      "nullable": true,
+      "type": "character varying(100)"
+    }
+  },
+  "analisisinmunoserologico": {
+    "idanalisis": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idunidadmadre": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "codigoanalisis": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "fechaanalisis": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "resultadovih": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "resultadochagas": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "resultadohepatitisb": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "resultadohepatitisc": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "resultadosifilis": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "resultadohtlv": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "dictamenfinal": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "habilitaextraccion": {
+      "nullable": false,
+      "type": "boolean"
+    }
+  },
+  "bajainventario": {
+    "idbaja": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idunidadmadre": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idejemplarbolsa": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechahorabaja": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "motivobaja": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "observaciones": {
+      "nullable": true,
+      "type": "\"text\""
+    }
+  },
+  "bitacoraauditoria": {
+    "idauditoria": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idusuario": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "rolactivo": {
+      "nullable": true,
+      "type": "character varying(60)"
+    },
+    "accionrealizada": {
+      "nullable": false,
+      "type": "character varying(255)"
+    },
+    "tablaafectada": {
+      "nullable": false,
+      "type": "character varying(60)"
+    },
+    "idregistroafectado": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "fechahora": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "iporigen": {
+      "nullable": true,
+      "type": "character varying(45)"
+    }
+  },
+  "citadonacion": {
+    "idcita": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechahoraprogramada": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "prefiltroaprobado": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "asistenciaconfirmada": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "estadocita": {
+      "nullable": false,
+      "type": "character varying(25)"
+    }
+  },
+  "citalaboratorio": {
+    "idcitalab": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idreceptor": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idinstitucion": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "fechahoracita": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "fechacirugiaprogramada": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "tipoanalisisrequerido": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "muestrarecolectada": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "estadocita": {
+      "nullable": false,
+      "type": "character varying(25)"
+    }
+  },
+  "comprobantedespacho": {
+    "iddespacho": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "codigoguiadespacho": {
+      "nullable": false,
+      "type": "character varying(35)"
+    },
+    "fechahorasalida": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "receptorentrega": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "temperaturadespacho": {
+      "nullable": false,
+      "type": "numeric(4,1)"
+    },
+    "estadoentrega": {
+      "nullable": false,
+      "type": "character varying(30)"
+    }
+  },
+  "comprobantepago": {
+    "idcomprobante": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "numerorecibofactura": {
+      "nullable": false,
+      "type": "character varying(35)"
+    },
+    "conceptoservicio": {
+      "nullable": false,
+      "type": "character varying(150)"
+    },
+    "montototal": {
+      "nullable": false,
+      "type": "numeric(10,2)"
+    },
+    "estadopago": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "metodopago": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "fechahorapago": {
+      "nullable": true,
+      "type": "timestamp without time zone"
+    }
+  },
+  "compromisodonacion": {
+    "idcompromiso": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idreposicion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonafirmante": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "iddonante": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "fechacompromiso": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "donacionconcretada": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "volumendonadoefectivoml": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "estadocompromiso": {
+      "nullable": false,
+      "type": "character varying(25)"
+    },
+    "idextraccion": {
+      "nullable": true,
+      "type": "integer"
+    }
+  },
+  "consentimientoinformado": {
+    "idconsentimiento": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idextraccion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechafirma": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "declaracionjuradaaceptada": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "firmadigital": {
+      "nullable": false,
+      "type": "\"text\""
+    }
+  },
+  "detallecitarequisito": {
+    "iddetallecita": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idcita": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idrequisito": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cumplerequisito": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "observacionrespuesta": {
+      "nullable": true,
+      "type": "character varying(200)"
+    }
+  },
+  "detalledespacho": {
+    "iddetalledespacho": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "iddespacho": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idejemplarbolsa": {
+      "nullable": false,
+      "type": "integer"
+    }
+  },
+  "detallesolicitud": {
+    "iddetalle": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idgrupo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "tipocomponenterequerido": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "cantidadsolicitada": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cantidadasignada": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "categoriaetaria": {
+      "nullable": false,
+      "type": "character varying(20)"
+    }
+  },
+  "diferimiento": {
+    "iddiferimiento": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idtriaje": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idposibledonador": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "motivodetallado": {
+      "nullable": false,
+      "type": "character varying(255)"
+    },
+    "diasinhabilitacion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechainiciodiferimiento": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "fechafindiferimiento": {
+      "nullable": true,
+      "type": "\"date\""
+    }
+  },
+  "donante": {
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "carnetdigitalcodigo": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "tipodonante": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "estadohabilitacion": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "fechaultimadonacion": {
+      "nullable": true,
+      "type": "\"date\""
+    }
+  },
+  "ejemplarbolsa": {
+    "idejemplarbolsa": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idunidadmadre": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "idgrupo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idubicacion": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "codigoejemplark": {
+      "nullable": false,
+      "type": "character varying(40)"
+    },
+    "tipocomponente": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "volumenml": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechaextraccion": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "fechacaducidad": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "estadobolsak": {
+      "nullable": false,
+      "type": "character varying(25)"
+    },
+    "esexclusivoautologo": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "categoriaetaria": {
+      "nullable": false,
+      "type": "character varying(20)"
+    }
+  },
+  "extracciondonacion": {
+    "idextraccion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonadonante": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "codigoextraccion": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "fechahora": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "volumenextraidoml": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "brazoextraccion": {
+      "nullable": false,
+      "type": "character varying(15)"
+    },
+    "idtriaje": {
+      "nullable": true,
+      "type": "integer"
+    }
+  },
+  "gruposanguineo": {
+    "idgrupo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "grupoabo": {
+      "nullable": false,
+      "type": "character varying(5)"
+    },
+    "factorrh": {
+      "nullable": false,
+      "type": "character varying(10)"
+    }
+  },
+  "incentivoentrega": {
+    "idincentivo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idextraccion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "tipoarticulo": {
+      "nullable": false,
+      "type": "character varying(80)"
+    },
+    "refrigerioentregado": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "fechahoraentrega": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    }
+  },
+  "institucionsalud": {
+    "idinstitucion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "nombreinstitucion": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "tipoinstitucion": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "direccion": {
+      "nullable": true,
+      "type": "character varying(150)"
+    },
+    "telefonocontacto": {
+      "nullable": true,
+      "type": "character varying(25)"
+    }
+  },
+  "parametrostockminimo": {
+    "idparametro": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idgrupo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "tipocomponente": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "stockminimoseguridad": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "stockcriticoalerta": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "categoriaetaria": {
+      "nullable": false,
+      "type": "character varying(20)"
+    }
+  },
+  "persona": {
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "ci": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "nombres": {
+      "nullable": false,
+      "type": "character varying(80)"
+    },
+    "apellidos": {
+      "nullable": false,
+      "type": "character varying(80)"
+    },
+    "sexo": {
+      "nullable": false,
+      "type": "character(1)"
+    },
+    "fechanacimiento": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "direccion": {
+      "nullable": true,
+      "type": "character varying(150)"
+    },
+    "celular": {
+      "nullable": true,
+      "type": "character varying(20)"
+    },
+    "ocupacion": {
+      "nullable": true,
+      "type": "character varying(80)"
+    },
+    "nacionalidad": {
+      "nullable": true,
+      "type": "character varying(50)"
+    }
+  },
+  "personalsalud": {
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cargo": {
+      "nullable": false,
+      "type": "character varying(80)"
+    },
+    "registroprofesional": {
+      "nullable": false,
+      "type": "character varying(40)"
+    }
+  },
+  "posibledonador": {
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "estadoaptitud": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "tieneanalisis": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "fecharegistropostulante": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "carnetprovisionalcodigo": {
+      "nullable": true,
+      "type": "character varying(40)"
+    }
+  },
+  "pruebacompatibilidad": {
+    "idpruebacompatibilidad": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idejemplarbolsa": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechahoraprueba": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "resultadocompatibilidad": {
+      "nullable": false,
+      "type": "character varying(25)"
+    },
+    "faseantiglobulina": {
+      "nullable": true,
+      "type": "character varying(50)"
+    },
+    "reaccionobservada": {
+      "nullable": true,
+      "type": "character varying(150)"
+    },
+    "aprobadoparadespacho": {
+      "nullable": false,
+      "type": "boolean"
+    }
+  },
+  "receptor": {
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "codigohistorialclinico": {
+      "nullable": false,
+      "type": "character varying(40)"
+    },
+    "gruposanguineoreceptor": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "idgrupo": {
+      "nullable": true,
+      "type": "integer"
+    }
+  },
+  "reposicionpendiente": {
+    "idreposicion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cantidadbolsasareponer": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cantidadrecuperada": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechalimitereposicion": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "estadoreposicion": {
+      "nullable": false,
+      "type": "character varying(25)"
+    }
+  },
+  "requisitodonacion": {
+    "idrequisito": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "nombrerequisito": {
+      "nullable": false,
+      "type": "character varying(120)"
+    },
+    "tiporequisito": {
+      "nullable": false,
+      "type": "character varying(40)"
+    },
+    "esexcluyentedefinitivo": {
+      "nullable": false,
+      "type": "boolean"
+    }
+  },
+  "reservasangre": {
+    "idreserva": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idreceptor": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idejemplarbolsa": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "iddetallesolicitud": {
+      "nullable": true,
+      "type": "integer"
+    },
+    "fechareserva": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "esautologa": {
+      "nullable": false,
+      "type": "boolean"
+    },
+    "motivoreserva": {
+      "nullable": true,
+      "type": "character varying(100)"
+    },
+    "fechavencimientoreserva": {
+      "nullable": false,
+      "type": "\"date\""
+    },
+    "estadoreserva": {
+      "nullable": false,
+      "type": "character varying(30)"
+    }
+  },
+  "rol": {
+    "idrol": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "nombrerol": {
+      "nullable": false,
+      "type": "character varying(60)"
+    },
+    "codigorol": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "descripcion": {
+      "nullable": true,
+      "type": "\"text\""
+    }
+  },
+  "solicitudhospitalaria": {
+    "idsolicitud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idinstitucion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idreceptor": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "numerosolicitud": {
+      "nullable": false,
+      "type": "character varying(35)"
+    },
+    "fechahorarequerimiento": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "prioridadsolicitud": {
+      "nullable": false,
+      "type": "character varying(25)"
+    },
+    "motivotransfusion": {
+      "nullable": true,
+      "type": "character varying(150)"
+    },
+    "velocidadgoteo": {
+      "nullable": true,
+      "type": "character varying(50)"
+    },
+    "horariorequerido": {
+      "nullable": true,
+      "type": "character varying(50)"
+    },
+    "cantidadbolsassolicitadas": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cantidadentregadareceptor": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "cantidadretiradastock": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "estadosolicitud": {
+      "nullable": false,
+      "type": "character varying(25)"
+    }
+  },
+  "triajeclinico": {
+    "idtriaje": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idposibledonador": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersonalsalud": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechahora": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "pesokg": {
+      "nullable": false,
+      "type": "numeric(5,2)"
+    },
+    "presionsistolicammhg": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "presiondiastolicammhg": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "nivelhemoglobina": {
+      "nullable": false,
+      "type": "numeric(4,1)"
+    },
+    "temperatura": {
+      "nullable": false,
+      "type": "numeric(4,1)"
+    },
+    "resultadoaptitud": {
+      "nullable": false,
+      "type": "character varying(20)"
+    }
+  },
+  "ubicacionalmacen": {
+    "idubicacion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "identificadorcompartimento": {
+      "nullable": false,
+      "type": "character varying(30)"
+    },
+    "tipoequipo": {
+      "nullable": false,
+      "type": "character varying(80)"
+    },
+    "temperaturaregistro": {
+      "nullable": false,
+      "type": "numeric(4,1)"
+    },
+    "capacidadmaxima": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "capacidadocupada": {
+      "nullable": false,
+      "type": "integer"
+    }
+  },
+  "unidadsangretotal": {
+    "idunidadmadre": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idextraccion": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idgrupo": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "codigobolsamadre": {
+      "nullable": false,
+      "type": "character varying(40)"
+    },
+    "tipobolsa": {
+      "nullable": false,
+      "type": "character varying(40)"
+    },
+    "estadoliberacion": {
+      "nullable": false,
+      "type": "character varying(30)"
+    }
+  },
+  "usuario": {
+    "idusuario": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idpersona": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "username": {
+      "nullable": false,
+      "type": "character varying(50)"
+    },
+    "email": {
+      "nullable": false,
+      "type": "character varying(100)"
+    },
+    "passwordhash": {
+      "nullable": false,
+      "type": "character varying(255)"
+    },
+    "estado": {
+      "nullable": false,
+      "type": "character varying(20)"
+    },
+    "fechacreacion": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    },
+    "intentosfallidos": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechabloqueohasta": {
+      "nullable": true,
+      "type": "timestamp without time zone"
+    },
+    "totalbloqueosrecibidos": {
+      "nullable": false,
+      "type": "integer"
+    }
+  },
+  "usuariorol": {
+    "idusuario": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "idrol": {
+      "nullable": false,
+      "type": "integer"
+    },
+    "fechaasignacion": {
+      "nullable": false,
+      "type": "timestamp without time zone"
+    }
+  }
+}

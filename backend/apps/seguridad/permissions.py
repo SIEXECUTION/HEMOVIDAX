@@ -19,7 +19,8 @@ class IsAdminRole(permissions.BasePermission):
 
         # Comprobar rol ADMIN en la tabla UsuarioRol
         if hasattr(request.user, 'roles'):
-            return request.user.roles.filter(codigorol='ADMIN').exists()
+            role = request.headers.get('X-Active-Role')
+            return (not role or role == 'ADMIN') and request.user.roles.filter(codigorol='ADMIN').exists()
         return False
 
 
@@ -45,5 +46,15 @@ class IsHealthStaffRole(permissions.BasePermission):
             'MED_SOLICITANTE'
         ]
         if hasattr(request.user, 'roles'):
-            return request.user.roles.filter(codigorol__in=roles_salud).exists()
+            role = request.headers.get('X-Active-Role')
+            return request.user.roles.filter(codigorol__in=[role] if role else roles_salud).exists() and (not role or role in roles_salud)
         return False
+
+
+class ClinicalRole(IsHealthStaffRole):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        roles = getattr(view, 'allowed_roles', ['ADMIN'])
+        selected = request.headers.get('X-Active-Role')
+        return request.user.roles.filter(codigorol__in=[selected] if selected else roles).exists() and (not selected or selected in roles)

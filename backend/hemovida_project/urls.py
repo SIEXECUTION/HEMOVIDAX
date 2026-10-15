@@ -12,16 +12,17 @@ from django.db import connection
 def health_check(request):
     db_status = "connected"
     try:
-        connection.ensure_connection()
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+    except Exception:
+        db_status = 'unavailable'
 
     return JsonResponse({
         "status": "ok" if db_status == "connected" else "database_disconnected",
         "service": "HemoVida API Backend",
         "database": db_status,
         "timestamp": timezone.now().isoformat()
-    })
+    }, status=200 if db_status == 'connected' else 503)
 
 urlpatterns = [
     # Health Check raíz para Render (evita 404 en HEAD /)

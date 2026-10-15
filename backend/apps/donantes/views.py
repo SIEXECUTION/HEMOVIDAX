@@ -1,628 +1,457 @@
-"""
-Vistas de API REST para la app Donantes
-con soporte para Donante Calificado (con QR) y Posible Donador (sin análisis).
-"""
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from django.db.models import Sum, Count, Q
-from django.db import transaction
-import random
-from datetime import date, timedelta
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
+"""API del circuito de donación, desde el prefiltro hasta el refrigerio."""
 
+from uuid import uuid4
+from datetime import timedelta
+from django.db import transaction
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import serializers
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from .models import (
-    Persona, PosibleDonador, Donante, ExtraccionDonacion,
-    Diferimiento, CompromisoDonacion, CitaDonacion, DetalleCitaRequisito,
-    TriajeClinico, RequisitoDonacion
+    Persona,
+    PosibleDonador,
+    CitaDonacion,
+    RequisitoDonacion,
+    DetalleCitaRequisito,
+    TriajeClinico,
+    Diferimiento,
+    Donante,
+    ExtraccionDonacion,
+    ConsentimientoInformado,
+    IncentivoEntrega,
 )
-from .serializers import CarnetDigitalResponseSerializer, PosibleDonadorResponseSerializer
-from apps.inventario.models import UnidadSangreTotal, EjemplarBolsa, GrupoSanguineo, UbicacionAlmacen
-from apps.seguridad.models import PersonalSalud, BitacoraAuditoria
+from .services import (
+    card,
+    access_person,
+    block_if_ineligible,
+    has_reactive,
+    appointment_phase,
+)
+from apps.inventario.models import GrupoSanguineo, UnidadSangreTotal
+from apps.seguridad.models import PersonalSalud
+from apps.seguridad.permissions import ClinicalRole, IsHealthStaffRole
+from apps.seguridad.views import audit
+
 
 class DonanteCarnetDigitalView(APIView):
-    """
-    Endpoint: GET /api/donantes/<ci>/carnet/
-    Consultar Carnet Digital e Historial Biológico del Donante.
-    Permite la búsqueda por C.I. o código de carnet (HEMO-YYYY-XXXX).
-    Si el usuario aún es 'Posible Donador', devuelve su estado de aptitud y falta de análisis serológico.
-    """
-    permission_classes = [AllowAny]
-
     def get(self, request, ci):
-        query = ci.strip()
-        query_hyphen = query.replace(' ', '-').replace('_', '-')
-        query_spaced = query.replace('-', ' ')
-        query_digits = ''.join(c for c in query if c.isdigit())
-        
-        # 1. Búsqueda en Donante Calificado (superó Inmunoserología)
-        donante_filter = (
-            Q(persona__ci__iexact=query) |
-            Q(persona__ci__iexact=query_hyphen) |
-            Q(carnetDigitalCodigo__iexact=query) |
-            Q(carnetDigitalCodigo__iexact=query_hyphen) |
-            Q(carnetDigitalCodigo__iexact=query_spaced)
-        )
-        if len(query_digits) >= 4:
-            donante_filter |= Q(persona__ci__icontains=query_digits) | Q(carnetDigitalCodigo__icontains=query_digits)
-
-        donante = Donante.objects.select_related('persona').filter(donante_filter).first()
-
-        if donante:
-            persona = donante.persona
-            sexo = (persona.sexo or 'M').upper()
-            fecha_ultima = donante.fechaUltimaDonacion
-            hoy = timezone.now().date()
-
-            # REGLA BIOLÓGICA (CONSULTA C1):
-            # Varones (M): 90 días de intervalo biológico entre donaciones.
-            # Mujeres (F) y otros: 120 días de intervalo biológico de recuperación.
-            periodo_espera_dias = 90 if sexo == 'M' else 120
-
-            if fecha_ultima:
-                fecha_habilitacion = fecha_ultima + timedelta(days=periodo_espera_dias)
-                delta_dias = (fecha_habilitacion - hoy).days
-                dias_restantes_espera = max(0, delta_dias)
-            else:
-                fecha_habilitacion = None
-                dias_restantes_espera = 0
-
-            # Regla de aptitud: Requiere estado 'Apto' y haber cumplido los días biológicos de reposo
-            esta_habilitado = (donante.estadoHabilitacion == 'Apto') and (dias_restantes_espera == 0)
-
-            # HISTORIAL ACUMULADO (CONSULTA C3):
-            extracciones_qs = ExtraccionDonacion.objects.filter(
-                personaDonante=persona
-            ).select_related('personalSalud__persona').order_by('-fechaHora')
-
-            agregados = extracciones_qs.aggregate(
-                total_donaciones=Count('idextraccion'),
-                volumen_total=Sum('volumenextraidoml')
-            )
-            total_donaciones = agregados['total_donaciones'] or 0
-            volumen_total = agregados['volumen_total'] or 0
-
-            payload = {
-                'esPosibleDonador': False,
-                'carnetDigitalCodigo': donante.carnetDigitalCodigo,
-                'ci': persona.ci,
-                'nombres': persona.nombres,
-                'apellidos': persona.apellidos,
-                'donante': persona.nombreCompleto,
-                'sexo': persona.sexo,
-                'celular': persona.celular,
-                'direccion': persona.direccion,
-                'ocupacion': persona.ocupacion,
-                'tipoDonante': donante.tipoDonante,
-                'estadoHabilitacion': donante.estadoHabilitacion,
-                'fechaUltimaDonacion': fecha_ultima,
-                'periodoEsperaDias': periodo_espera_dias,
-                'fechaHabilitacionProxima': fecha_habilitacion,
-                'diasRestantesEspera': dias_restantes_espera,
-                'estaHabilitadoParaDonar': esta_habilitado,
-                'totalDonacionesHistoricas': total_donaciones,
-                'volumenHistoricoAportadoMl': volumen_total,
-                'nacionalidad': getattr(persona, 'nacionalidad', 'Boliviana') or 'Boliviana',
-                'grupoSanguineo': 'O',
-                'factorRh': 'Positivo',
-                'extraccionesRecientes': extracciones_qs[:10],
-            }
-
-            serializer = CarnetDigitalResponseSerializer(payload)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        # 2. Búsqueda en PosibleDonador (Postulante en fase inicial con código provisional o CI)
-        posible_filter = (
-            Q(persona__ci__iexact=query) |
-            Q(persona__ci__iexact=query_hyphen) |
-            Q(carnetProvisionalCodigo__iexact=query) |
-            Q(carnetProvisionalCodigo__iexact=query_hyphen) |
-            Q(persona__usuario__username__iexact=query) |
-            Q(persona__usuario__username__iexact=query_hyphen)
-        )
-        if len(query_digits) >= 4:
-            posible_filter |= (
-                Q(persona__ci__icontains=query_digits) |
-                Q(carnetProvisionalCodigo__icontains=query_digits) |
-                Q(persona__usuario__username__icontains=query_digits)
-            )
-
-        posible = PosibleDonador.objects.select_related('persona').filter(posible_filter).first()
-
-        if posible:
-            persona = posible.persona
-            codigo_provisional = posible.carnetProvisionalCodigo or f"HV-POST-{date.today().year}-{persona.idPersona}"
-            payload_posible = {
-                'esPosibleDonador': True,
-                'carnetDigitalCodigo': codigo_provisional,
-                'carnetProvisionalCodigo': codigo_provisional,
-                'ci': persona.ci,
-                'nombres': persona.nombres,
-                'apellidos': persona.apellidos,
-                'donante': persona.nombreCompleto,
-                'sexo': persona.sexo,
-                'celular': persona.celular,
-                'direccion': persona.direccion,
-                'ocupacion': persona.ocupacion,
-                'nacionalidad': getattr(persona, 'nacionalidad', 'Boliviana') or 'Boliviana',
-                'estadoAptitud': posible.estadoAptitud,
-                'tieneAnalisis': posible.tieneAnalisis,
-                'fechaRegistroPostulante': posible.fechaRegistroPostulante,
-                'estaHabilitadoParaDonar': False,
-                'mensaje': 'Postulante registrado en HemoVida. Habilitado para evaluación inicial y cuestionario de prefiltro.'
-            }
-            serializer = PosibleDonadorResponseSerializer(payload_posible)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        return Response({
-            "detail": f"No se encontró ningún donante ni postulante registrado con C.I. o código '{ci}'."
-        }, status=status.HTTP_404_NOT_FOUND)
+        p = Persona.objects.filter(
+            Q(ci__iexact=ci)
+            | Q(donante__carnetdigitalcodigo__iexact=ci)
+            | Q(posible_donador__carnetprovisionalcodigo__iexact=ci)
+        ).first()
+        if not p:
+            return Response({"detail": "No se encontró la persona."}, status=404)
+        access_person(request, p)
+        return Response(card(p))
 
 
 class CarnetDigitalQRView(APIView):
-    """
-    Consultar Carnet Digital con QR e Historial Transaccional.
-    Calcula descanso biológico (90d M / 120d F), verifica diferimientos vigentes
-    y retorna el historial de donaciones y reposiciones.
-    """
-    permission_classes = [AllowAny]
-
     def get(self, request, idpersona):
-        hoy = timezone.now().date()
-        persona = Persona.objects.filter(idpersona=idpersona).first()
-        donante = Donante.objects.filter(idpersona=idpersona).first()
-        if not persona or not donante:
-            return Response(
-                {'error': 'La persona aún no cuenta con un Carnet Digital de Donante Calificado.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # 1. Obtener grupo sanguíneo verificado desde su última bolsa madre o registro
-        ultima_bolsa = UnidadSangreTotal.objects.filter(
-            idextraccion__idpersonadonante=idpersona
-        ).select_related('idgrupo').order_by('-idunidadmadre').first()
-        if ultima_bolsa and ultima_bolsa.idgrupo:
-            simbolo_rh = '+' if ultima_bolsa.idgrupo.factorrh == 'Positivo' else '-'
-            grupo_sanguineo = f"{ultima_bolsa.idgrupo.grupoabo} Rh{simbolo_rh}"
-        else:
-            grupo_sanguineo = "Pendiente de Tipificación"
-
-        # 2. Verificar Excepción E1: Diferimiento vigente
-        diferimiento_activo = Diferimiento.objects.filter(
-            idposibledonador=idpersona,
-            fechafindiferimiento__gte=hoy
-        ).order_by('-fechafindiferimiento').first()
-
-        # 3. Calcular ventana de descanso celular (90 días varón / 120 días mujer)
-        intervalo_dias = 90 if persona.sexo == 'M' else 120
-        dias_restantes = 0
-        proxima_fecha_habilitada = hoy
-        porcentaje_recuperacion = 100
-
-        if donante.fechaultimadonacion:
-            proxima_fecha_habilitada = donante.fechaultimadonacion + timedelta(days=intervalo_dias)
-            if proxima_fecha_habilitada > hoy:
-                dias_restantes = (proxima_fecha_habilitada - hoy).days
-                dias_transcurridos = (hoy - donante.fechaultimadonacion).days
-                porcentaje_recuperacion = min(100, max(0, int((dias_transcurridos / intervalo_dias) * 100)))
-
-        # Determinar semáforo del carnet
-        if donante.estadohabilitacion == 'Diferido Definitivo':
-            semaforo_carnet = 'Rojo'
-            mensaje_estado = 'Suspensión Definitiva por Seguridad Transfusional'
-            apto_para_donar_hoy = False
-        elif diferimiento_activo:
-            semaforo_carnet = 'Rojo'
-            mensaje_estado = f"Diferido temporalmente hasta {diferimiento_activo.fechafindiferimiento} ({diferimiento_activo.motivodetallado})"
-            proxima_fecha_habilitada = max(proxima_fecha_habilitada, diferimiento_activo.fechafindiferimiento)
-            dias_restantes = (proxima_fecha_habilitada - hoy).days
-            apto_para_donar_hoy = False
-        elif dias_restantes > 0:
-            semaforo_carnet = 'Amarillo'
-            mensaje_estado = f'En recuperación celular ({dias_restantes} días restantes)'
-            apto_para_donar_hoy = False
-        else:
-            semaforo_carnet = 'Verde'
-            mensaje_estado = '¡Tu cuerpo está 100% listo para donar!'
-            apto_para_donar_hoy = True
-
-        # 4. Historial de extracciones y reposiciones
-        extracciones = ExtraccionDonacion.objects.filter(
-            idpersonadonante=idpersona
-        ).order_by('-fechahora')
-        historial_donaciones = [{
-            'idextraccion': e.idextraccion,
-            'codigo': e.codigoextraccion,
-            'fecha': e.fechahora.strftime('%Y-%m-%d %H:%M') if e.fechahora else '',
-            'volumen_ml': e.volumenextraidoml,
-            'brazo': e.brazoextraccion
-        } for e in extracciones]
-
-        reposiciones = CompromisoDonacion.objects.filter(
-            iddonante=idpersona,
-            donacionconcretada=True
-        ).select_related('idreposicion__idsolicitud').order_by('-fechacompromiso')
-        historial_reposiciones = [{
-            'idcompromiso': r.idcompromiso,
-            'fecha': r.fechacompromiso,
-            'solicitud_asociada': r.idreposicion.idsolicitud.numerosolicitud if r.idreposicion and r.idreposicion.idsolicitud else 'N/A',
-            'volumen_donado_ml': r.volumendonadoefectivoml,
-            'estado': r.estadocompromiso
-        } for r in reposiciones]
-
-        # Payload dinámico para el código QR de validación rápida
-        qr_payload = (
-            f"HEMOVIDA|CARNET:{donante.carnetdigitalcodigo}|CI:{persona.ci}|"
-            f"GRUPO:{grupo_sanguineo}|ESTADO:{donante.estadohabilitacion}|"
-            f"PROX_HAB:{proxima_fecha_habilitada}"
-        )
-
-        return Response({
-            'carnet_codigo': donante.carnetdigitalcodigo,
-            'nombre_completo': f"{persona.nombres} {persona.apellidos}",
-            'ci': persona.ci,
-            'sexo': persona.sexo,
-            'intervalo_biologico_dias': intervalo_dias,
-            'tipo_donante': donante.tipodonante,
-            'grupo_sanguineo': grupo_sanguineo,
-            'estado_habilitacion': donante.estadohabilitacion,
-            'semaforo_carnet': semaforo_carnet,
-            'mensaje_estado': mensaje_estado,
-            'apto_para_donar_hoy': apto_para_donar_hoy,
-            'fecha_ultima_donacion': donante.fechaultimadonacion,
-            'proxima_fecha_habilitada': proxima_fecha_habilitada,
-            'dias_restantes_espera': dias_restantes,
-            'porcentaje_recuperacion': porcentaje_recuperacion,
-            'total_donaciones': len(historial_donaciones),
-            'volumen_total_aportado_ml': sum(e['volumen_ml'] for e in historial_donaciones),
-            'vidas_impactadas': len(historial_donaciones) * 3,
-            'qr_validation_string': qr_payload,
-            'historial_donaciones': historial_donaciones,
-            'historial_reposiciones': historial_reposiciones
-        }, status=status.HTTP_200_OK)
+        p = get_object_or_404(Persona, pk=idpersona)
+        access_person(request, p)
+        return Response(card(p))
 
 
-# ============================================================================
-# Orquestación Atómica de Citas de Donación (DRF @transaction.atomic)
-# ============================================================================
-class AgendarCitaDonacionView(APIView):
-    """
-    Orquestación atómica para agendar citas de donación.
-    POST /api/donantes/citas/
-    """
-    permission_classes = [AllowAny]
-
-    @transaction.atomic
-    def post(self, request):
-        id_postulante = request.data.get('idposibledonador') or request.data.get('idpersona')
-        fecha_hora = request.data.get('fechahoraprogramada')
-        tipo_cita = request.data.get('tipocita', 'Voluntario Altruista')
-        requisitos = request.data.get('requisitos', [])
-
-        if not id_postulante or not fecha_hora:
-            return Response(
-                {"detail": "Campos 'idposibledonador' (o 'idpersona') y 'fechahoraprogramada' son obligatorios."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        posible = PosibleDonador.objects.filter(idpersona=id_postulante).first()
-        if not posible:
-            persona = get_object_or_404(Persona, idpersona=id_postulante)
-            posible = PosibleDonador.objects.create(
-                persona=persona,
-                estadoaptitud='No Apto',
-                tieneanalisis=False
-            )
-
-        # Verificar si tiene diferimiento médico activo
-        hoy = timezone.now().date()
-        diferimiento = Diferimiento.objects.filter(
-            idposibledonador=posible,
-            fechafindiferimiento__gte=hoy
-        ).first()
-        if diferimiento:
-            return Response(
-                {
-                    "detail": f"El postulante tiene un diferimiento activo hasta {diferimiento.fechafindiferimiento} por: {diferimiento.motivodetallado}."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        prefiltro = bool(request.data.get('prefiltroaprobado', True))
-        persona = posible.persona if hasattr(posible, 'persona') else posible
-        cita = CitaDonacion.objects.create(
-            idpersona=persona,
-            fechahoraprogramada=fecha_hora,
-            prefiltroaprobado=prefiltro,
-            asistenciaconfirmada=False,
-            estadocita='Programada'
-        )
-
-        detalles_creados = []
-        for req in requisitos:
-            id_req = req.get('idrequisito')
-            cumple = req.get('cumplerequisito', True)
-            obs = req.get('observacion', '')
-            req_obj = RequisitoDonacion.objects.filter(idrequisito=id_req).first()
-            if req_obj:
-                det = DetalleCitaRequisito.objects.create(
-                    idcita=cita,
-                    idrequisito=req_obj,
-                    cumplerequisito=cumple,
-                    observacionrespuesta=obs
+class RequisitosView(APIView):
+    def get(self, request):
+        return Response(
+            list(
+                RequisitoDonacion.objects.values(
+                    "idrequisito",
+                    "nombrerequisito",
+                    "tiporequisito",
+                    "esexcluyentedefinitivo",
                 )
-                detalles_creados.append(det.iddetallecita)
-
-        rol_activo = request.headers.get('X-Active-Role') or 'PERS_COLECTA'
-        ip_origen = request.META.get('REMOTE_ADDR', '127.0.0.1')
-        BitacoraAuditoria.objects.create(
-            idusuario=getattr(request.user, 'idusuario', None) if request.user.is_authenticated else None,
-            rolactivo=rol_activo,
-            accionrealizada=f"Agendamiento de cita de donación #{cita.idcita}",
-            tablaafectada='CitaDonacion',
-            idregistroafectado=cita.idcita,
-            iporigen=ip_origen
+            )
         )
 
-        return Response({
-            "mensaje": "Cita de donación agendada exitosamente.",
-            "idcita": cita.idcita,
-            "fechahoraprogramada": cita.fechahoraprogramada,
-            "estadocita": cita.estadocita,
-            "prefiltroaprobado": cita.prefiltroaprobado,
-            "requisitos_evaluados": len(detalles_creados)
-        }, status=status.HTTP_201_CREATED)
+
+class AnswerSerializer(serializers.Serializer):
+    idrequisito = serializers.PrimaryKeyRelatedField(
+        queryset=RequisitoDonacion.objects.all()
+    )
+    cumplerequisito = serializers.BooleanField()
+    observacion = serializers.CharField(
+        max_length=200, required=False, allow_blank=True
+    )
 
 
-# ============================================================================
-# Orquestación Atómica de Triaje Clínico (DRF @transaction.atomic)
-# ============================================================================
-class ProcesarTriajeClinicoView(APIView):
-    """
-    Orquestación atómica para procesamiento de triaje clínico (reemplazo SP sp_procesar_triaje_clinico).
-    POST /api/donantes/triaje/
-    """
-    permission_classes = [AllowAny]
+class AppointmentSerializer(serializers.Serializer):
+    idpersona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    fechahoraprogramada = serializers.DateTimeField()
+    requisitos = AnswerSerializer(many=True)
+
+    def validate_fechahoraprogramada(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Selecciona una fecha futura.")
+        return value
+
+
+def appointment_data(c):
+    return {
+        "idcita": c.pk,
+        "idpersona": c.idpersona_id,
+        "persona": c.idpersona.nombreCompleto,
+        "ci": c.idpersona.ci,
+        "fechahoraprogramada": c.fechahoraprogramada,
+        "prefiltroaprobado": c.prefiltroaprobado,
+        "asistenciaconfirmada": c.asistenciaconfirmada,
+        "estadocita": c.estadocita,
+        "fase": appointment_phase(c.idpersona),
+    }
+
+
+class AgendarCitaDonacionView(APIView):
+    def get(self, request):
+        qs = CitaDonacion.objects.select_related("idpersona").all()
+        if not IsHealthStaffRole().has_permission(request, self):
+            qs = qs.filter(idpersona_id=request.user.idpersona_id)
+        return Response([appointment_data(c) for c in qs[:500]])
 
     @transaction.atomic
     def post(self, request):
-        data = request.data
-        id_postulante = data.get('idposibledonador') or data.get('idpersona')
-        id_personal = data.get('idpersonalsalud')
-
-        if not id_postulante or not id_personal:
-            return Response(
-                {"detail": "Campos 'idposibledonador' e 'idpersonalsalud' son obligatorios."},
-                status=status.HTTP_400_BAD_REQUEST
+        data = dict(request.data)
+        data["idpersona"] = data.get("idpersona") or data.get("idposibledonador")
+        s = AppointmentSerializer(data=data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+        p = Persona.objects.select_for_update().get(pk=d["idpersona"].pk)
+        access_person(request, p)
+        block_if_ineligible(p)
+        if has_reactive(p):
+            raise serializers.ValidationError(
+                "Antecedente serológico no apto. Requiere evaluación médica."
             )
-
-        posible = get_object_or_404(PosibleDonador, idpersona=id_postulante)
-        personal = get_object_or_404(PersonalSalud, pk=id_personal)
-
-        peso = float(data.get('pesokg', 0))
-        temp = float(data.get('temperatura', 0))
-        hb = float(data.get('hemoglobina', 0))
-        p_sis = int(data.get('presionsistolica', 0))
-        p_dia = int(data.get('presiondiastolica', 0))
-        motivo_diferimiento = data.get('motivodiferimiento')
-        dias_inhabilitacion = int(data.get('diasinhabilitacion', 0))
-
-        # Regla clínica de biometría básica
-        es_apto = (
-            peso >= 50.0 and
-            temp <= 37.5 and
-            hb >= 12.5 and
-            not motivo_diferimiento
-        )
-        resultado_aptitud = 'Apto' if es_apto else 'Rechazado'
-
-        triaje = TriajeClinico.objects.create(
-            idposibledonador=posible,
-            idpersonalsalud=personal,
-            fechahora=timezone.now(),
-            pesokg=peso,
-            presionsistolicammhg=p_sis,
-            presiondiastolicammhg=p_dia,
-            nivelhemoglobina=hb,
-            temperatura=temp,
-            resultadoaptitud=resultado_aptitud
-        )
-
-        diferimiento_obj = None
-        hoy = timezone.now().date()
-        if resultado_aptitud == 'Rechazado':
-            motivo_final = motivo_diferimiento or 'No cumple parámetros de biometría en triaje (peso/hemoglobina/temperatura)'
-            fin_dif = hoy + timedelta(days=dias_inhabilitacion) if dias_inhabilitacion > 0 else hoy + timedelta(days=30)
-            diferimiento_obj = Diferimiento.objects.create(
-                idtriaje=triaje,
-                idposibledonador=posible,
-                motivodetallado=motivo_final,
-                diasinhabilitacion=dias_inhabilitacion or 30,
-                fechainiciodiferimiento=hoy,
-                fechafindiferimiento=fin_dif
+        expected = set(RequisitoDonacion.objects.values_list("idrequisito", flat=True))
+        answers = d["requisitos"]
+        ids = [a["idrequisito"].pk for a in answers]
+        if not expected or set(ids) != expected or len(ids) != len(expected):
+            raise serializers.ValidationError(
+                "Debes responder una vez cada requisito del catálogo vigente."
             )
-            Donante.objects.filter(idpersona=id_postulante).update(
-                estadohabilitacion='Diferido Definitivo' if dias_inhabilitacion > 365 else 'Diferido Temporal'
+        if CitaDonacion.objects.filter(idpersona=p, estadocita="Programada").exists():
+            raise serializers.ValidationError(
+                "Ya existe una cita programada. Cancélala antes de agendar otra."
             )
-            PosibleDonador.objects.filter(idpersona=id_postulante).update(
-                estadoaptitud='No Apto'
-            )
-        else:
-            Donante.objects.filter(idpersona=id_postulante).update(
-                estadohabilitacion='Apto'
-            )
-            PosibleDonador.objects.filter(idpersona=id_postulante).update(
-                estadoaptitud='Apto'
-            )
-
-        rol_activo = request.headers.get('X-Active-Role') or 'DOC_TRIAJE'
-        ip_origen = request.META.get('REMOTE_ADDR', '127.0.0.1')
-        BitacoraAuditoria.objects.create(
-            idusuario=getattr(request.user, 'idusuario', None) if request.user.is_authenticated else None,
-            rolactivo=rol_activo,
-            accionrealizada=f"Triaje clínico #{triaje.idtriaje}: Dictamen {resultado_aptitud}",
-            tablaafectada='TriajeClinico',
-            idregistroafectado=triaje.idtriaje,
-            iporigen=ip_origen
+        possible, _ = PosibleDonador.objects.get_or_create(
+            idpersona=p, defaults={"carnetprovisionalcodigo": f"HV-POST-{p.pk:08d}"}
         )
-
-        return Response({
-            "mensaje": f"Triaje clínico registrado con resultado '{resultado_aptitud}'.",
-            "idtriaje": triaje.idtriaje,
-            "resultadoaptitud": triaje.resultadoaptitud,
-            "fechahora": triaje.fechahora,
-            "diferimiento": {
-                "iddiferimiento": diferimiento_obj.iddiferimiento,
-                "motivo": diferimiento_obj.motivodetallado,
-                "fechafindiferimiento": diferimiento_obj.fechafindiferimiento
-            } if diferimiento_obj else None
-        }, status=status.HTTP_201_CREATED)
-
-
-# ============================================================================
-# Orquestación Atómica de Flebotomía y Fraccionamiento (DRF @transaction.atomic)
-# ============================================================================
-class RegistrarFlebotomiaFraccionamientoView(APIView):
-    """
-    Orquestación atómica para registrar flebotomía y fraccionamiento mecánico inmediato
-    (reemplazo del SP sp_registrar_flebotomia_y_fraccionar).
-    POST /api/donantes/flebotomia/
-    """
-    permission_classes = [AllowAny]
-
-    @transaction.atomic
-    def post(self, request):
-        data = request.data
-        id_donante = data.get('idpersonadonante') or data.get('iddonante')
-        id_personal = data.get('idpersonalsalud')
-        id_triaje = data.get('idtriaje')
-        id_grupo = data.get('idgrupo')
-        id_camara = data.get('idubicacioncamara')
-        brazo = data.get('brazo', 'Derecho')
-        volumen_ml = int(data.get('volumenml', 450))
-        categoria_etaria = data.get('categoriaetaria', 'Adulto')
-
-        if not id_donante or not id_personal or not id_triaje or not id_grupo:
-            return Response(
-                {"detail": "Campos 'idpersonadonante', 'idpersonalsalud', 'idtriaje' e 'idgrupo' son obligatorios."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        persona = get_object_or_404(Persona, idpersona=id_donante)
-        personal = get_object_or_404(PersonalSalud, pk=id_personal)
-        triaje = get_object_or_404(TriajeClinico, idtriaje=id_triaje)
-        grupo = get_object_or_404(GrupoSanguineo, idgrupo=id_grupo)
-        camara = UbicacionAlmacen.objects.filter(idubicacion=id_camara).first() if id_camara else None
-
-        if triaje.resultadoaptitud != 'Apto':
-            return Response(
-                {"detail": "No se puede realizar flebotomía: el triaje clínico asociado no resultó Apto."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        hoy = timezone.now().date()
-        date_str = hoy.strftime('%Y%m%d')
-        rnd_ext = random.randint(1000, 9999)
-        rnd_mad = random.randint(1000, 9999)
-        codigo_ext = f"EXT-{date_str}-{rnd_ext}"
-        codigo_madre = f"MAD-{date_str}-{rnd_mad}"
-
-        # 1. Registro de punción física (ExtraccionDonacion) con idpersonadonante e idtriaje vinculados obligatoriamente
-        extraccion = ExtraccionDonacion.objects.create(
-            idpersonadonante=persona,
-            idpersonalsalud=personal,
-            idtriaje=triaje,
-            codigoextraccion=codigo_ext,
-            volumenextraidoml=volumen_ml,
-            brazoextraccion=brazo,
-            fechahora=timezone.now()
+        failed = [a["idrequisito"] for a in answers if not a["cumplerequisito"]]
+        approved = not failed
+        possible.estadoaptitud = "En Evaluacion" if approved else "No Apto"
+        possible.save(update_fields=["estadoaptitud"])
+        c = CitaDonacion.objects.create(
+            idpersona=p,
+            fechahoraprogramada=d["fechahoraprogramada"],
+            prefiltroaprobado=approved,
+            estadocita="Programada" if approved else "Cancelada",
         )
-
-        # 2. Alta de bolsa madre en cuarentena (UnidadSangreTotal)
-        madre = UnidadSangreTotal.objects.create(
-            idextraccion=extraccion,
-            idgrupo=grupo,
-            codigobolsamadre=codigo_madre,
-            tipobolsa='Bolsa Cuadruple CPD-SAGM',
-            estadoliberacion='En Cuarentena'
-        )
-
-        # 3. Fraccionamiento mecánico inmediato (<6-8 horas)
-        # Nombre oficial: 'Concentrado de Globulos Rojos' (estricto)
-        bolsa_gr = EjemplarBolsa.objects.create(
-            idunidadmadre=madre,
-            idgrupo=grupo,
-            idubicacion=camara,
-            codigoejemplark=f"{codigo_madre}-K1-GR",
-            tipocomponente='Concentrado de Globulos Rojos',
-            volumenml=250,
-            fechaextraccion=hoy,
-            fechacaducidad=hoy + timedelta(days=35),
-            estadobolsak='En Cuarentena',
-            categoriaetaria=categoria_etaria
-        )
-
-        bolsa_pl = EjemplarBolsa.objects.create(
-            idunidadmadre=madre,
-            idgrupo=grupo,
-            idubicacion=camara,
-            codigoejemplark=f"{codigo_madre}-K2-PL",
-            tipocomponente='Plasma Fresco Congelado',
-            volumenml=150,
-            fechaextraccion=hoy,
-            fechacaducidad=hoy + timedelta(days=365),
-            estadobolsak='En Cuarentena',
-            categoriaetaria=categoria_etaria
-        )
-
-        # Actualizar fecha última donación en Donante (si existe)
-        Donante.objects.filter(idpersona=id_donante).update(fechaultimadonacion=hoy)
-
-        rol_activo = request.headers.get('X-Active-Role') or 'PERS_COLECTA'
-        ip_origen = request.META.get('REMOTE_ADDR', '127.0.0.1')
-        BitacoraAuditoria.objects.create(
-            idusuario=getattr(request.user, 'idusuario', None) if request.user.is_authenticated else None,
-            rolactivo=rol_activo,
-            accionrealizada=f"Flebotomía #{extraccion.idextraccion} y fraccionamiento inmediato (CGR, PFC)",
-            tablaafectada='ExtraccionDonacion',
-            idregistroafectado=extraccion.idextraccion,
-            iporigen=ip_origen
-        )
-
-        return Response({
-            "mensaje": "Flebotomía y fraccionamiento procesados exitosamente en DRF con @transaction.atomic.",
-            "extraccion": {
-                "idextraccion": extraccion.idextraccion,
-                "codigoextraccion": extraccion.codigoextraccion,
-                "volumenextraidoml": extraccion.volumenextraidoml,
-                "brazoextraccion": extraccion.brazoextraccion,
-                "idtriaje": triaje.idtriaje
-            },
-            "unidadmadre": {
-                "idunidadmadre": madre.idunidadmadre,
-                "codigobolsamadre": madre.codigobolsamadre,
-                "estadoliberacion": madre.estadoliberacion
-            },
-            "bolsas": [
-                {
-                    "idejemplarbolsa": bolsa_gr.idejemplarbolsa,
-                    "codigoejemplark": bolsa_gr.codigoejemplark,
-                    "tipocomponente": bolsa_gr.tipocomponente,
-                    "volumenml": bolsa_gr.volumenml,
-                    "fechacaducidad": bolsa_gr.fechacaducidad,
-                    "categoriaetaria": bolsa_gr.categoriaetaria
-                },
-                {
-                    "idejemplarbolsa": bolsa_pl.idejemplarbolsa,
-                    "codigoejemplark": bolsa_pl.codigoejemplark,
-                    "tipocomponente": bolsa_pl.tipocomponente,
-                    "volumenml": bolsa_pl.volumenml,
-                    "fechacaducidad": bolsa_pl.fechacaducidad,
-                    "categoriaetaria": bolsa_pl.categoriaetaria
-                }
+        DetalleCitaRequisito.objects.bulk_create(
+            [
+                DetalleCitaRequisito(
+                    idcita=c,
+                    idrequisito=a["idrequisito"],
+                    cumplerequisito=a["cumplerequisito"],
+                    observacionrespuesta=a.get("observacion", ""),
+                )
+                for a in answers
             ]
-        }, status=status.HTTP_201_CREATED)
+        )
+        audit(
+            request,
+            "Prefiltro aprobado y cita agendada" if approved else "Prefiltro rechazado",
+            "CitaDonacion",
+            c.pk,
+        )
+        result = appointment_data(c)
+        result["motivos_exclusion"] = [
+            {"motivo": r.nombrerequisito, "definitivo": r.esexcluyentedefinitivo}
+            for r in failed
+        ]
+        return Response(result, status=201)
 
 
+class CancelarCitaView(APIView):
+    @transaction.atomic
+    def post(self, request, pk):
+        c = get_object_or_404(CitaDonacion.objects.select_for_update(), pk=pk)
+        access_person(request, c.idpersona)
+        if c.estadocita != "Programada" or c.asistenciaconfirmada:
+            raise serializers.ValidationError(
+                "Esta cita ya no se puede cancelar desde el portal."
+            )
+        c.estadocita = "Cancelada"
+        c.save(update_fields=["estadocita"])
+        audit(request, "Cita cancelada", "CitaDonacion", c.pk)
+        return Response(appointment_data(c))
+
+
+class AdmisionView(APIView):
+    permission_classes = [ClinicalRole]
+    allowed_roles = ["ADMIN", "PERS_COLECTA"]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        c = get_object_or_404(
+            CitaDonacion.objects.select_for_update(), pk=pk, estadocita="Programada"
+        )
+        p = Persona.objects.select_for_update().get(pk=c.idpersona_id)
+        block_if_ineligible(p)
+        if not c.prefiltroaprobado:
+            raise serializers.ValidationError("Debe aprobar el prefiltro.")
+        c.asistenciaconfirmada = True
+        c.save(update_fields=["asistenciaconfirmada"])
+        tr = (
+            TriajeClinico.objects.filter(idposibledonador_id=p.pk)
+            .order_by("-fechahora")
+            .first()
+        )
+        authorized = bool(
+            tr
+            and tr.resultadoaptitud == "Apto"
+            and timezone.localtime(tr.fechahora).date() == timezone.localdate()
+            and not has_reactive(p)
+        )
+        audit(
+            request,
+            "Asistencia confirmada; "
+            + ("pase a extracción" if authorized else "derivación al área médica"),
+            "CitaDonacion",
+            c.pk,
+        )
+        return Response(
+            {
+                "asistenciaconfirmada": True,
+                "autoriza_flebotomia": authorized,
+                "idtriaje": tr.pk if authorized else None,
+                "mensaje": "Pase autorizado."
+                if authorized
+                else "Debe pasar al área médica para evaluación.",
+            }
+        )
+
+
+class TriageSerializer(serializers.Serializer):
+    idpersona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    pesokg = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=1)
+    temperatura = serializers.DecimalField(
+        max_digits=4, decimal_places=1, min_value=30, max_value=45
+    )
+    hemoglobina = serializers.DecimalField(max_digits=4, decimal_places=1, min_value=1)
+    presionsistolica = serializers.IntegerField(min_value=1, max_value=300)
+    presiondiastolica = serializers.IntegerField(min_value=1, max_value=200)
+    motivodiferimiento = serializers.CharField(
+        max_length=255, required=False, allow_blank=True
+    )
+    diasinhabilitacion = serializers.IntegerField(
+        min_value=1, max_value=36500, default=30
+    )
+    definitivo = serializers.BooleanField(default=False)
+
+
+def staff(request):
+    return get_object_or_404(PersonalSalud, pk=request.user.idpersona_id)
+
+
+class ProcesarTriajeClinicoView(APIView):
+    permission_classes = [ClinicalRole]
+    allowed_roles = ["ADMIN", "DOC_TRIAJE"]
+
+    @transaction.atomic
+    def post(self, request):
+        data = dict(request.data)
+        data["idpersona"] = data.get("idpersona") or data.get("idposibledonador")
+        s = TriageSerializer(data=data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+        p = Persona.objects.select_for_update().get(pk=d["idpersona"].pk)
+        c = CitaDonacion.objects.filter(
+            idpersona=p, estadocita="Programada", asistenciaconfirmada=True
+        ).first()
+        if not c:
+            raise serializers.ValidationError(
+                "Debe confirmar la asistencia a una cita antes del triaje."
+            )
+        possible, _ = PosibleDonador.objects.get_or_create(
+            idpersona=p, defaults={"carnetprovisionalcodigo": f"HV-POST-{p.pk:08d}"}
+        )
+        approved = (
+            d["pesokg"] >= 50
+            and d["temperatura"] <= 37.5
+            and d["hemoglobina"] >= 12.5
+            and not d.get("motivodiferimiento")
+            and not d["definitivo"]
+        )
+        # El dictamen médico se complementa con las restricciones persistentes.
+        if approved:
+            block_if_ineligible(p)
+            if has_reactive(p):
+                raise serializers.ValidationError(
+                    "Existe serología no apta; no se puede autorizar extracción."
+                )
+        tr = TriajeClinico.objects.create(
+            idposibledonador=possible,
+            idpersonalsalud=staff(request),
+            pesokg=d["pesokg"],
+            temperatura=d["temperatura"],
+            nivelhemoglobina=d["hemoglobina"],
+            presionsistolicammhg=d["presionsistolica"],
+            presiondiastolicammhg=d["presiondiastolica"],
+            resultadoaptitud="Apto" if approved else "Rechazado",
+        )
+        if not approved:
+            today = timezone.localdate()
+            Diferimiento.objects.create(
+                idtriaje=tr,
+                idposibledonador=possible,
+                motivodetallado=d.get("motivodiferimiento")
+                or "No cumple parámetros del triaje",
+                diasinhabilitacion=d["diasinhabilitacion"],
+                fechainiciodiferimiento=today,
+                fechafindiferimiento=None
+                if d["definitivo"]
+                else today + timedelta(days=d["diasinhabilitacion"]),
+            )
+            Donante.objects.filter(pk=p.pk).update(
+                estadohabilitacion="Diferido Definitivo"
+                if d["definitivo"]
+                else "Diferido Temporal"
+            )
+        possible.estadoaptitud = "Apto" if approved else "No Apto"
+        possible.save(update_fields=["estadoaptitud"])
+        audit(
+            request, f"Triaje registrado: {tr.resultadoaptitud}", "TriajeClinico", tr.pk
+        )
+        return Response(
+            {"idtriaje": tr.pk, "resultadoaptitud": tr.resultadoaptitud}, status=201
+        )
+
+
+class ExtractionSerializer(serializers.Serializer):
+    idpersonadonante = serializers.PrimaryKeyRelatedField(
+        queryset=Persona.objects.all()
+    )
+    idtriaje = serializers.PrimaryKeyRelatedField(queryset=TriajeClinico.objects.all())
+    idgrupo = serializers.PrimaryKeyRelatedField(queryset=GrupoSanguineo.objects.all())
+    volumenml = serializers.IntegerField(min_value=1, max_value=1000)
+    brazo = serializers.ChoiceField(choices=["Izquierdo", "Derecho"])
+    declaracionjuradaaceptada = serializers.BooleanField()
+    firmadigital = serializers.CharField(max_length=20000)
+
+
+class RegistrarFlebotomiaFraccionamientoView(APIView):
+    permission_classes = [ClinicalRole]
+    allowed_roles = ["ADMIN", "PERS_COLECTA"]
+
+    @transaction.atomic
+    def post(self, request):
+        s = ExtractionSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+        p = Persona.objects.select_for_update().get(pk=d["idpersonadonante"].pk)
+        tr = TriajeClinico.objects.select_for_update().get(pk=d["idtriaje"].pk)
+        block_if_ineligible(p)
+        if (
+            tr.idposibledonador_id != p.pk
+            or tr.resultadoaptitud != "Apto"
+            or timezone.localtime(tr.fechahora).date() != timezone.localdate()
+        ):
+            raise serializers.ValidationError(
+                "Se requiere triaje aprobado de esta persona en la fecha actual."
+            )
+        latest = (
+            TriajeClinico.objects.filter(idposibledonador_id=p.pk)
+            .order_by("-fechahora", "-idtriaje")
+            .first()
+        )
+        if latest.pk != tr.pk or has_reactive(p):
+            raise serializers.ValidationError(
+                "Debe utilizar el último triaje vigente y no tener serología no apta."
+            )
+        if ExtraccionDonacion.objects.filter(idtriaje=tr).exists():
+            raise serializers.ValidationError(
+                "Este triaje ya tiene una extracción registrada."
+            )
+        c = CitaDonacion.objects.filter(
+            idpersona=p, estadocita="Programada", asistenciaconfirmada=True
+        ).first()
+        if not c or not d["declaracionjuradaaceptada"]:
+            raise serializers.ValidationError(
+                "Se requiere asistencia confirmada y consentimiento aceptado."
+            )
+        ext = ExtraccionDonacion.objects.create(
+            idpersonadonante=p,
+            idpersonalsalud=staff(request),
+            idtriaje=tr,
+            codigoextraccion=f"EXT-{uuid4().hex[:20]}",
+            volumenextraidoml=d["volumenml"],
+            brazoextraccion=d["brazo"],
+        )
+        ConsentimientoInformado.objects.create(
+            idextraccion=ext,
+            declaracionjuradaaceptada=True,
+            firmadigital=d["firmadigital"],
+        )
+        mother = UnidadSangreTotal.objects.create(
+            idextraccion=ext,
+            idgrupo=d["idgrupo"],
+            codigobolsamadre=f"MAD-{uuid4().hex[:20]}",
+            tipobolsa="Bolsa Cuadruple CPD-SAGM",
+            estadoliberacion="En Cuarentena",
+        )
+        Donante.objects.filter(pk=p.pk).update(fechaultimadonacion=timezone.localdate())
+        c.estadocita = "Atendida"
+        c.save(update_fields=["estadocita"])
+        audit(
+            request,
+            "Extracción y consentimiento registrados; bolsa madre en cuarentena",
+            "ExtraccionDonacion",
+            ext.pk,
+        )
+        return Response(
+            {
+                "extraccion": {
+                    "idextraccion": ext.pk,
+                    "codigoextraccion": ext.codigoextraccion,
+                },
+                "unidadmadre": {
+                    "idunidadmadre": mother.pk,
+                    "codigobolsamadre": mother.codigobolsamadre,
+                },
+                "bolsas": [],
+            },
+            status=201,
+        )
+
+
+class RefrigerioView(APIView):
+    permission_classes = [ClinicalRole]
+    allowed_roles = ["ADMIN", "PERS_COLECTA"]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        ext = get_object_or_404(ExtraccionDonacion.objects.select_for_update(), pk=pk)
+        if (
+            ext.volumenextraidoml <= 0
+            or not ConsentimientoInformado.objects.filter(idextraccion=ext).exists()
+        ):
+            raise serializers.ValidationError(
+                "No existe extracción efectiva con consentimiento."
+            )
+        if IncentivoEntrega.objects.filter(idextraccion=ext).exists():
+            raise serializers.ValidationError("El refrigerio ya está registrado.")
+        article = request.data.get("tipoarticulo", "Refrigerio nutricional")
+        if not isinstance(article, str) or not article.strip() or len(article) > 80:
+            raise serializers.ValidationError(
+                "Indica el artículo entregado (máximo 80 caracteres)."
+            )
+        item = IncentivoEntrega.objects.create(
+            idextraccion=ext, tipoarticulo=article, refrigerioentregado=True
+        )
+        audit(request, "Refrigerio entregado", "IncentivoEntrega", item.pk)
+        return Response(
+            {"idincentivo": item.pk, "refrigerioentregado": True}, status=201
+        )

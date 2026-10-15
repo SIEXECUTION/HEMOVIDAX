@@ -10,6 +10,7 @@ Mapeo de tablas de PostgreSQL (Supabase):
 - detallesolicitud
 """
 from django.db import models
+from apps.fields import UTCDateTimeField
 from django.utils import timezone
 
 
@@ -216,6 +217,7 @@ class ParametroStockMinimo(models.Model):
     stockminimoseguridad = models.IntegerField(db_column='stockminimoseguridad')
     stockcriticoalerta = models.IntegerField(db_column='stockcriticoalerta')
     categoriaetaria = models.CharField(
+        choices=[(age, age) for age in ('Adulto', 'Adolescente', 'Pediátrico')],
         max_length=20, 
         default='Adulto',
         db_column='categoriaetaria'
@@ -289,8 +291,8 @@ class UnidadSangreTotal(models.Model):
         'donantes.ExtraccionDonacion',
         on_delete=models.CASCADE, 
         db_column='idextraccion',
-        null=True,
-        blank=True
+        null=False,
+        blank=False
     )
     idgrupo = models.ForeignKey(
         GrupoSanguineo, 
@@ -362,6 +364,7 @@ class EjemplarBolsa(models.Model):
         db_column='esexclusivoautologo'
     )
     categoriaetaria = models.CharField(
+        choices=[(age, age) for age in ('Adulto', 'Adolescente', 'Pediátrico')],
         max_length=20, 
         default='Adulto',
         db_column='categoriaetaria'
@@ -506,21 +509,21 @@ class SolicitudHospitalaria(models.Model):
     idinstitucion = models.ForeignKey(
         InstitucionSalud,
         on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
+        null=False,
+        blank=False,
         db_column='idinstitucion',
         related_name='solicitudes'
     )
     idreceptor = models.ForeignKey(
         'donantes.Receptor',
         on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
+        null=False,
+        blank=False,
         db_column='idreceptor',
         related_name='solicitudes'
     )
     numerosolicitud = models.CharField(max_length=35, unique=True, db_column='numerosolicitud')
-    fechahorarequerimiento = models.DateTimeField(default=timezone.now, db_column='fechahorarequerimiento')
+    fechahorarequerimiento = UTCDateTimeField(default=timezone.now, db_column='fechahorarequerimiento')
     prioridadsolicitud = models.CharField(max_length=25, default='Programada', db_column='prioridadsolicitud')
     motivotransfusion = models.CharField(max_length=150, null=True, blank=True, db_column='motivotransfusion')
     velocidadgoteo = models.CharField(max_length=50, null=True, blank=True, db_column='velocidadgoteo')
@@ -561,6 +564,7 @@ class DetalleSolicitud(models.Model):
     cantidadsolicitada = models.IntegerField(db_column='cantidadsolicitada')
     cantidadasignada = models.IntegerField(default=0, db_column='cantidadasignada')
     categoriaetaria = models.CharField(
+        choices=[(age, age) for age in ('Adulto', 'Adolescente', 'Pediátrico')],
         max_length=20, 
         default='Adulto',
         db_column='categoriaetaria'
@@ -599,7 +603,7 @@ class ReservaSangre(models.Model):
         blank=True,
         db_column='iddetallesolicitud'
     )
-    fechareserva = models.DateTimeField(default=timezone.now, db_column='fechareserva')
+    fechareserva = UTCDateTimeField(default=timezone.now, db_column='fechareserva')
     esautologa = models.BooleanField(default=False, db_column='esautologa')
     motivoreserva = models.CharField(max_length=100, null=True, blank=True, db_column='motivoreserva')
     fechavencimientoreserva = models.DateField(db_column='fechavencimientoreserva')
@@ -636,11 +640,11 @@ class BajaInventario(models.Model):
     idpersonalsalud = models.ForeignKey(
         'seguridad.PersonalSalud',
         on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
+        null=False,
+        blank=False,
         db_column='idpersonalsalud'
     )
-    fechahorabaja = models.DateTimeField(default=timezone.now, db_column='fechahorabaja')
+    fechahorabaja = UTCDateTimeField(default=timezone.now, db_column='fechahorabaja')
     motivobaja = models.CharField(max_length=100, db_column='motivobaja')
     observaciones = models.TextField(null=True, blank=True, db_column='observaciones')
 
@@ -694,7 +698,7 @@ class ComprobantePago(models.Model):
     montototal = models.DecimalField(max_digits=10, decimal_places=2, db_column='montototal')
     estadopago = models.CharField(max_length=30, db_column='estadopago')
     metodopago = models.CharField(max_length=50, db_column='metodopago')
-    fechahorapago = models.DateTimeField(null=True, blank=True, db_column='fechahorapago')
+    fechahorapago = UTCDateTimeField(null=True, blank=True, db_column='fechahorapago')
 
     objects = FlexibleManager()
 
@@ -734,7 +738,7 @@ class PruebaCompatibilidad(models.Model):
         db_column='idpersonalsalud',
         related_name='pruebas_compatibilidad'
     )
-    fechahoraprueba = models.DateTimeField(default=timezone.now, db_column='fechahoraprueba')
+    fechahoraprueba = UTCDateTimeField(default=timezone.now, db_column='fechahoraprueba')
     resultadocompatibilidad = models.CharField(max_length=25, db_column='resultadocompatibilidad')
     faseantiglobulina = models.CharField(max_length=50, null=True, blank=True, db_column='faseantiglobulina')
     reaccionobservada = models.CharField(max_length=150, null=True, blank=True, db_column='reaccionobservada')
@@ -848,7 +852,7 @@ class ComprobanteDespacho(models.Model):
         related_name='despachos'
     )
     codigoguiadespacho = models.CharField(max_length=35, unique=True, db_column='codigoguiadespacho')
-    fechahorasalida = models.DateTimeField(default=timezone.now, db_column='fechahorasalida')
+    fechahorasalida = UTCDateTimeField(default=timezone.now, db_column='fechahorasalida')
     receptorentrega = models.CharField(max_length=100, db_column='receptorentrega')
     temperaturadespacho = models.DecimalField(max_digits=4, decimal_places=1, db_column='temperaturadespacho')
     estadoentrega = models.CharField(

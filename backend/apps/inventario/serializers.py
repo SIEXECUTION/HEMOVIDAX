@@ -62,9 +62,9 @@ class ParametroStockMinimoUpdateSerializer(serializers.ModelSerializer):
         stock_minimo = attrs.get('stockminimoseguridad', getattr(self.instance, 'stockminimoseguridad', 0))
         stock_critico = attrs.get('stockcriticoalerta', getattr(self.instance, 'stockcriticoalerta', 0))
 
-        if stock_critico > stock_minimo:
+        if stock_critico < 0 or stock_minimo <= 0 or stock_critico >= stock_minimo:
             raise serializers.ValidationError({
-                "stockCriticoAlerta": "El stock crítico de alerta no puede ser mayor que el stock mínimo de seguridad."
+                "stockCriticoAlerta": "El umbral crítico debe ser no negativo y menor que el mínimo de seguridad."
             })
 
         return attrs
