@@ -7,10 +7,19 @@ from django.urls import path, include
 from django.http import JsonResponse
 from django.utils import timezone
 
+from django.db import connection
+
 def health_check(request):
+    db_status = "connected"
+    try:
+        connection.ensure_connection()
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
     return JsonResponse({
-        "status": "ok",
+        "status": "ok" if db_status == "connected" else "database_disconnected",
         "service": "HemoVida API Backend",
+        "database": db_status,
         "timestamp": timezone.now().isoformat()
     })
 
