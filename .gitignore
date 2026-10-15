@@ -1,31 +1,64 @@
+# ============================================================================
 # Python / Django
+# ============================================================================
 __pycache__/
 *.py[cod]
+*.pyc
+*.pyo
+*.pyd
 *$py.class
 *.sqlite3
+*.sqlite
+*.db
+backend/db.sqlite3
 *.log
 .venv/
 env/
 venv/
 ENV/
-.env
+staticfiles/
+backend/staticfiles/
 
-# Base de datos y esquemas locales
+# ============================================================================
+# Variables de Entorno y Secretos
+# ============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# ============================================================================
+# Base de Datos y Esquemas Locales (Exclusión estricta)
+# ============================================================================
 database/
 schema*.txt
 schema.txt
 *.sql
-backend/db.sqlite3
+*.dump
+*.dmp
 
-# Node / React
+# ============================================================================
+# Node.js / React / Vite
+# ============================================================================
 node_modules/
+frontend/node_modules/
 dist/
+frontend/dist/
 dist-ssr/
-*.local
+frontend/dist-ssr/
 .vite/
+frontend/.vite/
+.vite-temp/
+frontend/.vite-temp/
+*.local
 
-# IDE & OS
+# ============================================================================
+# IDE, Editores y Sistema Operativo
+# ============================================================================
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini

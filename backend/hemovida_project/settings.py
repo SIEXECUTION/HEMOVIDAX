@@ -64,7 +64,7 @@ SILENCED_SYSTEM_CHECKS = ['fields.W342']
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Debe estar arriba de todo
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Soporte para servir archivos estáticos en Koyeb
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Soporte para servir archivos estáticos con WhiteNoise en producción (Render)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -227,12 +227,12 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-# Configuración de CORS para Frontend React y Vercel
-CORS_ALLOW_ALL_ORIGINS = True  # Permite que el frontend en Vercel se comunique sin bloqueos
+# Configuración de CORS para Frontend React (Cloudflare Pages) y orígenes autorizados
+CORS_ALLOW_ALL_ORIGINS = True  # Permite que el frontend en Cloudflare Pages se comunique sin bloqueos
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://.*\.pages\.dev$",
     r"^https?://.*\.vercel\.app$",
-    r"^https?://.*\.koyeb\.app$",
+    r"^https?://.*\.onrender\.com$",
     r"^http://localhost:(3000|5173)$",
     r"^http://127\.0\.0\.1:(3000|5173)$",
 ]
@@ -256,7 +256,7 @@ TIME_ZONE = 'America/La_Paz'
 USE_I18N = True
 USE_TZ = True
 
-# Archivos estáticos y WhiteNoise para Koyeb
+# Archivos estáticos y WhiteNoise para producción en Render
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
