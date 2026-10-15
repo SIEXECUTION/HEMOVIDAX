@@ -276,3 +276,24 @@ class SecurityWorkflowTests(WorkflowTestCase):
     def test_encoded_hash_cannot_be_used_as_password(self):
         self.assertTrue(self.donor_user.check_password('Clave#Segura2026'))
         self.assertFalse(self.donor_user.check_password(self.donor_user.passwordhash))
+
+from django.test import SimpleTestCase
+
+
+class CloudflareCorsTests(SimpleTestCase):
+    origin = 'https://hemovidax.siexecution2026.workers.dev'
+
+    def test_worker_origin_preflight_accepts_login_and_role_headers(self):
+        r = self.client.options('/api/auth/login/', HTTP_ORIGIN=self.origin,
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS='content-type,authorization,x-active-role')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers.get('Access-Control-Allow-Origin'), self.origin)
+        allowed = r.headers.get('Access-Control-Allow-Headers', '').lower()
+        self.assertIn('authorization', allowed)
+        self.assertIn('x-active-role', allowed)
+
+    def test_other_workers_are_not_authorized(self):
+        r = self.client.options('/api/auth/login/', HTTP_ORIGIN='https://other.example.workers.dev',
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST')
+        self.assertNotIn('Access-Control-Allow-Origin', r.headers)

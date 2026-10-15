@@ -5,15 +5,17 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
-  if (
-    command === "build" &&
-    !/^https:\/\/[^\s]+$/.test(env.VITE_API_URL || "")
-  ) {
+  const apiUrl = env.VITE_API_URL?.trim() || "https://hemovidax.onrender.com";
+  if (command === "build" && !/^https:\/\/[^\s]+$/.test(apiUrl)) {
     throw new Error(
       "Configura VITE_API_URL con la URL HTTPS del backend de Render antes de compilar.",
     );
   }
   return {
+    define:
+      command === "build"
+        ? { "import.meta.env.VITE_API_URL": JSON.stringify(apiUrl) }
+        : {},
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

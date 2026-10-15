@@ -169,6 +169,10 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [v.strip() for v in os.getenv(
     'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000' if DEBUG else ''
 ).split(',') if v.strip()]
+# Origen de esta instalación, también cuando se conserva una lista CORS anterior.
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://hemovidax.siexecution2026.workers.dev').strip().rstrip('/')
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 CORS_ALLOW_CREDENTIALS = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = not DEBUG

@@ -65,6 +65,8 @@ Si el despliegue usa `workers/scripts/hemovidax/versions`, corresponde a Workers
 
 `frontend/wrangler.jsonc` publica `dist` como assets del Worker `hemovidax` y configura el fallback SPA. No añadas `/* /index.html 200` a `_redirects`: Workers puede rechazar esa regla como un bucle. Configura también el origen real del frontend (`https://…workers.dev` o tu dominio) en `CORS_ALLOWED_ORIGINS` de Render.
 
+Esta instalación usa `https://hemovidax.siexecution2026.workers.dev` como frontend y `https://hemovidax.onrender.com` como backend. `FRONTEND_URL` autoriza ese origen exacto en Django, además de la lista CORS opcional. El build usa esa API de Render por defecto; `VITE_API_URL` permite cambiarla. Si ya definiste esa variable en Cloudflare, corrígela allí y vuelve a compilar: una variable existente tiene prioridad sobre el valor por defecto.
+
 Referencia: [Cloudflare Workers: routing para SPA](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/).
 
 ## Cloudflare Pages: alternativa de frontend
@@ -77,7 +79,7 @@ Referencia: [Cloudflare Workers: routing para SPA](https://developers.cloudflare
 | Variable de compilación | `VITE_API_URL=https://TU-SERVICIO.onrender.com` |
 | Node | 22 o posterior compatible con Vite |
 
-Define `VITE_API_URL` para producción y las vistas previas utilizadas. Admite URL con o sin `/api`. Al cambiarla, vuelve a compilar. El build falla si falta una URL HTTPS. Autoriza también los orígenes de vista previa necesarios en el CORS del backend.
+Puedes definir `VITE_API_URL` para producción y las vistas previas utilizadas. Admite URL con o sin `/api`. Al cambiarla, vuelve a compilar. El build falla si se proporciona una URL sin HTTPS; si se omite, usa la API de esta instalación. Autoriza también los orígenes de vista previa necesarios en el CORS del backend.
 
 Nunca coloques credenciales PostgreSQL, `SECRET_KEY` ni claves privadas de Supabase en variables `VITE_`: su contenido es público. El frontend llama a Django y Django conecta con PostgreSQL.
 

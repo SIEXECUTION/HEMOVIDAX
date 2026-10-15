@@ -46,21 +46,46 @@ export async function request<T = any>(
   anonymous = false,
 ): Promise<T> {
   const session = anonymous ? null : readSession();
-  const response = await fetch(`${API_URL}/${path}`, {
-    method: method || (body === undefined ? "GET" : "POST"),
-    headers: {
-      Accept: "application/json",
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(session
-        ? {
-            Authorization: `Bearer ${session.access}`,
-            ...(session.role ? { "X-Active-Role": session.role } : {}),
-          }
-        : {}),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const url = `${API_URL}/${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: method || (body === undefined ? "GET" : "POST"),
+      headers: {
+        Accept: "application/json",
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(session
+          ? {
+              Authorization: `Bearer ${session.access}`,
+              ...(session.role ? { "X-Active-Role": session.role } : {}),
+            }
+          : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(60000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error(
+        `La API no respondió a tiempo (${API_URL}). Render puede estar iniciando; intenta nuevamente.`,
+      );
+    }
+    throw new Error(
+      `No se pudo conectar con la API (${API_URL}). Comprueba VITE_API_URL en el build de Cloudflare y CORS_ALLOWED_ORIGINS en Render.`,
+    );
+  }
+  const isJson = response.headers
+    .get("content-type")
+    ?.includes("application/json");
+  if (!isJson) {
+    throw new Error(
+      `La API devolvió una respuesta que no es JSON (HTTP ${response.status}, ${url}). Comprueba que VITE_API_URL apunte al backend de Render y vuelve a compilar el frontend.`,
+    );
+  }
   const data = await response.json().catch(() => null);
+  if (response.ok && data === null) {
+    throw new Error(`La API devolvió JSON inválido (${url}).`);
+  }
   if (!response.ok) {
     if (response.status === 401 && session)
       window.dispatchEvent(new Event("hemovida:expired"));
