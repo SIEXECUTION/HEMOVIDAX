@@ -204,7 +204,9 @@ export function Form({
       }}
     >
       <fieldset disabled={busy}>
-        <div className="hv-fields">
+        <div
+          className={`hv-fields ${fields.length > 4 ? "hv-fields-multiple" : ""}`}
+        >
           {fields.map((f) => (
             <label
               key={f.name}

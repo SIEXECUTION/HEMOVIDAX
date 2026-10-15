@@ -14,9 +14,11 @@ import {
 export function DonorCard({
   personId,
   version,
+  view = "all",
 }: {
   personId: number;
   version: number;
+  view?: "all" | "history" | "card";
 }) {
   const resource = useResource<Row | null>(
       `donantes/carnet-digital/${personId}/`,
@@ -43,72 +45,80 @@ export function DonorCard({
       <ResourceNotice {...resource} />
       {c && (
         <>
-          <div className="hv-grid">
-            <Panel title="Tu carnet de donación">
-              <div className="hv-card">
-                <div>
-                  <span className="hv-eyebrow">
-                    {c.esPosibleDonador ? "CARNET PROVISIONAL" : "DONANTE"}
-                  </span>
-                  <h2>{c.nombre_completo}</h2>
-                  <p>C.I. {c.ci}</p>
-                  <strong>{c.grupo_sanguineo}</strong>
-                  <p>{c.carnet_codigo}</p>
-                  {qr && (
-                    <a download="carnet-qr.png" href={qr}>
-                      Descargar QR
-                    </a>
-                  )}
+          {view !== "history" && (
+            <div className="hv-grid">
+              <Panel title="Tu carnet de donación">
+                <div className="hv-card">
+                  <div>
+                    <span className="hv-eyebrow">
+                      {c.esPosibleDonador ? "CARNET PROVISIONAL" : "DONANTE"}
+                    </span>
+                    <h2>{c.nombre_completo}</h2>
+                    <p>C.I. {c.ci}</p>
+                    <strong>{c.grupo_sanguineo}</strong>
+                    <p>{c.carnet_codigo}</p>
+                    {qr && (
+                      <a download="carnet-qr.png" href={qr}>
+                        Descargar QR
+                      </a>
+                    )}
+                  </div>
+                  {qr && <img src={qr} alt="Código QR del carnet" />}
                 </div>
-                {qr && <img src={qr} alt="Código QR del carnet" />}
-              </div>
-            </Panel>
-            <Panel title="Tu próxima donación">
-              <span
-                className={`hv-badge ${c.esPosibleDonador && c.elegibilidad.semaforo !== "Rojo" ? "Amarillo" : c.elegibilidad.semaforo}`}
-              >
-                {c.estado_habilitacion}
-              </span>
-              <p>
-                {c.elegibilidad.motivo ||
-                  "Puedes completar el prefiltro para programar tu evaluación."}
-              </p>
-              <progress
-                max="100"
-                value={c.elegibilidad.porcentaje_recuperacion}
-              />
-              <p>
-                Recuperación biológica: {c.elegibilidad.porcentaje_recuperacion}
-                %
-              </p>
-              <p>Próxima fecha por descanso: {c.elegibilidad.proxima_fecha}</p>
-              {c.elegibilidad.suspendido_hasta && (
-                <p>Suspensión hasta: {c.elegibilidad.suspendido_hasta}</p>
-              )}
-            </Panel>
-          </div>
-          <Panel title="Historial de donaciones">
-            <Table
-              rows={c.historial_donaciones}
-              columns={[
-                ["codigoextraccion", "Código"],
-                ["fechahora", "Fecha"],
-                ["volumenextraidoml", "Volumen (ml)"],
-                ["brazoextraccion", "Brazo"],
-              ]}
-            />
-          </Panel>
-          <Panel title="Compromisos de reposición">
-            <Table
-              rows={c.historial_reposiciones}
-              columns={[
-                ["idcompromiso", "Compromiso"],
-                ["fechacompromiso", "Fecha"],
-                ["estadocompromiso", "Estado"],
-                ["donacionconcretada", "Concretada"],
-              ]}
-            />
-          </Panel>
+              </Panel>
+              <Panel title="Tu próxima donación">
+                <span
+                  className={`hv-badge ${c.esPosibleDonador && c.elegibilidad.semaforo !== "Rojo" ? "Amarillo" : c.elegibilidad.semaforo}`}
+                >
+                  {c.estado_habilitacion}
+                </span>
+                <p>
+                  {c.elegibilidad.motivo ||
+                    "Puedes completar el prefiltro para programar tu evaluación."}
+                </p>
+                <progress
+                  max="100"
+                  value={c.elegibilidad.porcentaje_recuperacion}
+                />
+                <p>
+                  Recuperación biológica:{" "}
+                  {c.elegibilidad.porcentaje_recuperacion}%
+                </p>
+                <p>
+                  Próxima fecha por descanso: {c.elegibilidad.proxima_fecha}
+                </p>
+                {c.elegibilidad.suspendido_hasta && (
+                  <p>Suspensión hasta: {c.elegibilidad.suspendido_hasta}</p>
+                )}
+              </Panel>
+            </div>
+          )}
+          {view !== "card" && (
+            <>
+              <Panel title="Historial de donaciones">
+                <Table
+                  rows={c.historial_donaciones}
+                  columns={[
+                    ["codigoextraccion", "Código"],
+                    ["fechahora", "Fecha"],
+                    ["volumenextraidoml", "Volumen (ml)"],
+                    ["brazoextraccion", "Brazo"],
+                  ]}
+                />
+              </Panel>
+              <Panel title="Compromisos de reposición">
+                <Table
+                  rows={c.historial_reposiciones}
+                  columns={[
+                    ["idcompromiso", "Compromiso"],
+                    ["fechacompromiso", "Fecha"],
+                    ["estadocompromiso", "Estado"],
+                    ["donacionconcretada", "Concretada"],
+                  ]}
+                />
+              </Panel>
+            </>
+          )}
         </>
       )}
     </>

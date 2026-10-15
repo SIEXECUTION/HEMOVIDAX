@@ -16,6 +16,8 @@ Django REST Framework + React/Vite para una base PostgreSQL **existente en Supab
 
 Las pantallas consultan la API. No se cargan registros simulados ni se guardan datos clínicos en localStorage. La sesión se conserva en sessionStorage. Cuando cambia un rol, vuelve a iniciar sesión para actualizar el selector.
 
+El frontend conserva la portada, la barra institucional, los modales y la paleta por área del diseño original. Los formularios se adaptan a los flujos del backend; el carnet, las estadísticas del donante y el directorio de instituciones muestran los registros devueltos por la API.
+
 ## Schema existente: no importar ni migrar
 
 Los 36 modelos de dominio mantienen `managed = False`. `backend/schema_contract.json` conserva solo la estructura entregada, sin datos ni credenciales. `usuariorol` utiliza su clave primaria compuesta real.

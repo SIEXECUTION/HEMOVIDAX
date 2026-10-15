@@ -15,6 +15,7 @@ from .models import (
     ParametroStockMinimo,
     UbicacionAlmacen,
     GrupoSanguineo,
+    InstitucionSalud,
     ReservaSangre,
     BajaInventario,
     ReposicionPendiente,
@@ -772,6 +773,11 @@ class CatalogosView(APIView):
                 "grupos": list(GrupoSanguineo.objects.values()),
                 "categorias": AGES,
                 "componentes": COMPONENTS,
+                "instituciones": list(
+                    InstitucionSalud.objects.values(
+                        "idinstitucion", "nombreinstitucion", "direccion", "telefonocontacto"
+                    )
+                ),
                 "ubicaciones": list(UbicacionAlmacen.objects.values())
                 if IsHealthStaffRole().has_permission(request, self)
                 else [],
