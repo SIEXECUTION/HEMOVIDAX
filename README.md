@@ -52,7 +52,22 @@ La salud ejecuta `SELECT 1`, devuelve 503 si falla y no revela detalles internos
 
 Para recuperar contraseñas, configura un remitente real mediante las variables SMTP de `backend/.env.example`, o `BREVO_API_KEY` y `BREVO_SENDER_EMAIL`. El código completo se envía solo por correo, expira en 15 minutos y se invalida después de usarlo. La firma funciona entre workers sin caché compartida ni tablas adicionales. El alta de personal devuelve la cuenta creada y no envía contraseñas por correo automáticamente.
 
-## Cloudflare Pages: frontend
+## Cloudflare Workers: frontend
+
+Si el despliegue usa `workers/scripts/hemovidax/versions`, corresponde a Workers. Desde el directorio `frontend`, utiliza:
+
+| Configuración | Valor |
+|---|---|
+| Root directory | `frontend` |
+| Build command | `npm ci && npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Variable de compilación | `VITE_API_URL=https://TU-SERVICIO.onrender.com` |
+
+`frontend/wrangler.jsonc` publica `dist` como assets del Worker `hemovidax` y configura el fallback SPA. No añadas `/* /index.html 200` a `_redirects`: Workers puede rechazar esa regla como un bucle. Configura también el origen real del frontend (`https://…workers.dev` o tu dominio) en `CORS_ALLOWED_ORIGINS` de Render.
+
+Referencia: [Cloudflare Workers: routing para SPA](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/).
+
+## Cloudflare Pages: alternativa de frontend
 
 | Configuración | Valor |
 |---|---|
